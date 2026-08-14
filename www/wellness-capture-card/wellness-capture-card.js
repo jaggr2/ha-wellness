@@ -11,10 +11,13 @@ class WellnessCaptureCard extends HTMLElement {
     this._config = config || {};
     this._status = "";
     this._thumb = null;
+    this._pendingPhoto = null;
+    this._analysis = null;
   }
 
   set hass(hass) {
     this._hass = hass;
+    this._trackAnalysis();
     this._render();
   }
 
@@ -25,11 +28,34 @@ class WellnessCaptureCard extends HTMLElement {
   _render() {
     if (!this._hass) return;
     const user = this._hass.user ? this._hass.user.name : "";
-    const statusColor = this._status === "ok" ? "#4caf50"
-      : this._status === "err" ? "#f44336" : "#888";
-    const statusText = this._status === "ok" ? "Photo saved"
-      : this._status === "err" ? this._error || "Upload failed"
-      : this._status === "busy" ? "Uploading…" : "";
+    let statusColor = "#888";
+    let statusText = "";
+    let resultHtml = "";
+
+    if (this._analysis) {
+      const a = this._analysis;
+      if (a.status === "analyzing") {
+        statusColor = "#ff9800";
+        statusText = "Analyzing…";
+      } else if (a.status === "done") {
+        statusColor = "#4caf50";
+        statusText = `Analyzed · ${a.kcal ?? 0} kcal`;
+        const items = (a.food || []).join(", ");
+        if (items) resultHtml = `<div style="margin-top:4px;font-size:12px;color:#555">${items}</div>`;
+      } else if (a.status === "error") {
+        statusColor = "#f44336";
+        statusText = a.error || "Analysis failed";
+      }
+    } else if (this._status === "ok") {
+      statusColor = "#4caf50";
+      statusText = "Photo saved";
+    } else if (this._status === "err") {
+      statusColor = "#f44336";
+      statusText = this._error || "Upload failed";
+    } else if (this._status === "busy") {
+      statusColor = "#888";
+      statusText = "Uploading…";
+    }
 
     this.innerHTML = `
       <ha-card>
@@ -44,6 +70,7 @@ class WellnessCaptureCard extends HTMLElement {
                  style="display:none">
           ${this._thumb ? `<div style="margin-top:8px"><img src="${this._thumb}" style="max-height:120px;border-radius:8px"></div>` : ""}
           ${statusText ? `<div style="margin-top:8px;color:${statusColor};font-size:12px">${statusText}</div>` : ""}
+          ${resultHtml}
         </div>
       </ha-card>`;
 
@@ -82,6 +109,7 @@ class WellnessCaptureCard extends HTMLElement {
 
   _upload(file) {
     this._status = "busy";
+    this._analysis = null;
     this._render();
     this._doUpload(file).catch((err) => {
       this._status = "err";
@@ -112,11 +140,34 @@ class WellnessCaptureCard extends HTMLElement {
       try { const j = await resp.json(); msg = j.message || j.error || msg; } catch (_) {}
       throw new Error(msg);
     }
+    let data = {};
+    try { data = await resp.json(); } catch (_) {}
     const url = URL.createObjectURL(blob);
     this._thumb = url;
     this._status = "ok";
     this._error = "";
+    this._pendingPhoto = data.photo || null;
+    this._analysis = null;
     this._render();
+  }
+
+  _trackAnalysis() {
+    // When the integration finishes analyzing our just-uploaded photo, the
+    // per-user "<user> meal analysis status" sensor carries attributes that
+    // include the photo path. Match on it so we can show progress + result.
+    if (!this._pendingPhoto || !this._hass || !this._hass.states) return;
+    for (const state of Object.values(this._hass.states)) {
+      if (!state.entity_id.startsWith("sensor.")) continue;
+      const attrs = state.attributes || {};
+      if (attrs.photo !== this._pendingPhoto) continue;
+      this._analysis = {
+        status: state.state,
+        kcal: attrs.kcal,
+        food: attrs.food,
+        error: attrs.error,
+      };
+      break;
+    }
   }
 }
 

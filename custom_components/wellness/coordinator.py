@@ -7,6 +7,7 @@ photo ingestion, and per-participant measurement reminders.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import secrets
 import time
@@ -102,6 +103,8 @@ class WellnessCoordinator:
         # per-user meal analysis aggregates
         self._today_kcal: dict[str, float] = {}
         self._last_meal: dict[str, str] = {}
+        # latest analysis activity (for the status sensor): slug -> record
+        self._analysis_status: dict[str, dict[str, Any]] = {}
 
     # ------------------------------------------------------------------
     # Config accessors
@@ -365,7 +368,17 @@ class WellnessCoordinator:
             EVENT_MEAL_LOGGED,
             {ATTR_USER: slug, "photo": str(rel_dir / filename)},
         )
+        # Kick off Groq analysis automatically so results show without a manual step.
+        self.hass.async_create_task(self._async_auto_analyze_after_log(slug))
         return str(rel_dir / filename)
+
+    async def _async_auto_analyze_after_log(self, slug: str) -> None:
+        """Analyze the just-logged meal (latest photo only)."""
+        await asyncio.sleep(2)
+        try:
+            await self.analyze_meals(slug, limit=1)
+        except HomeAssistantError as err:
+            _LOGGER.warning("Auto meal analysis skipped for %s: %s", slug, err)
 
     # ------------------------------------------------------------------
     # VLM meal analysis (Groq)
@@ -407,6 +420,13 @@ class WellnessCoordinator:
         for meal in candidates:
             photo_rel = meal["photo"]
             abs_path = self.mount_path / photo_rel
+            self._set_analysis_status(
+                slug,
+                status="analyzing",
+                photo=photo_rel,
+                kcal=None,
+                food=[],
+            )
             try:
                 photo_bytes = await self.hass.async_add_executor_job(
                     read_photo, str(abs_path)
@@ -416,6 +436,7 @@ class WellnessCoordinator:
                 _LOGGER.warning(
                     "Meal analysis failed for %s/%s: %s", slug, photo_rel, err
                 )
+                self._set_analysis_status(slug, status="error", photo=photo_rel, error=str(err))
                 continue
             await self.hass.async_add_executor_job(
                 append_jsonl,
@@ -424,6 +445,13 @@ class WellnessCoordinator:
             )
             analyzed_count += 1
             await self._async_refresh_meal_aggregates(slug)
+            self._set_analysis_status(
+                slug,
+                status="done",
+                photo=photo_rel,
+                kcal=analysis.get("estimated_kcal_total", 0),
+                food=[f.get("item", "") for f in analysis.get("food", []) if f.get("item")],
+            )
             self.hass.bus.async_fire(
                 EVENT_MEAL_ANALYZED,
                 {
@@ -432,7 +460,18 @@ class WellnessCoordinator:
                     "estimated_kcal_total": analysis.get("estimated_kcal_total", 0),
                 },
             )
+        if not analyzed_count and candidates:
+            self._set_analysis_status(slug, status="error", error="No photos could be analyzed")
         return analyzed_count
+
+    def _set_analysis_status(self, slug: str, **attrs: Any) -> None:
+        """Update the per-user meal analysis status and notify listeners."""
+        self._analysis_status[slug] = attrs
+        self._notify_listeners()
+
+    def meal_analysis_status(self, slug: str) -> dict[str, Any]:
+        """Return the latest analysis status record for a participant."""
+        return self._analysis_status.get(slug, {})
 
     async def _async_refresh_meal_aggregates(self, slug: str) -> None:
         """Recompute today's kcal + last meal for a participant."""
@@ -457,6 +496,13 @@ class WellnessCoordinator:
 
     def last_meal(self, slug: str) -> str:
         return self._last_meal.get(slug, "—")
+
+    async def async_restore_meal_aggregates(self) -> None:
+        """Recompute today-kcal/last-meal from the analysis ledgers at startup."""
+        for participant in self.participants:
+            slug = participant[PARTICIPANT_SLUG]
+            await self._async_refresh_meal_aggregates(slug)
+        self._notify_listeners()
 
     # ------------------------------------------------------------------
     # Measurement reminders

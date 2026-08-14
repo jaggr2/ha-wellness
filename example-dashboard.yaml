@@ -26,6 +26,7 @@ views:
           - entity: button.roger_save_body_metrics
           - entity: sensor.roger_today_kcal
           - entity: sensor.roger_last_meal
+          - entity: sensor.roger_meal_analysis_status
 
       - type: statistics-graph
         title: Weight trend

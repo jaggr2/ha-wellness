@@ -47,6 +47,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await coordinator.async_load_pending()
     await coordinator.async_setup_weight_sensors()
     coordinator.async_setup_reminders()
+    await coordinator.async_restore_meal_aggregates()
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     await _async_register_services(hass)

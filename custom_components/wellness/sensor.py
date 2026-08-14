@@ -35,6 +35,7 @@ async def async_setup_entry(
         slug = participant["slug"]
         entities.append(WellnessKcalSensor(coordinator, entry, slug))
         entities.append(WellnessLastMealSensor(coordinator, entry, slug))
+        entities.append(WellnessMealStatusSensor(coordinator, entry, slug))
     async_add_entities(entities)
 
 
@@ -96,6 +97,40 @@ class WellnessLastMealSensor(SensorEntity):
     @property
     def native_value(self) -> str:
         return self._coordinator.last_meal(self._slug)
+
+
+class WellnessMealStatusSensor(SensorEntity):
+    """Status of the latest Groq meal analysis (analyzing/done/error)."""
+
+    def __init__(self, coordinator: WellnessCoordinator, entry: ConfigEntry, slug: str) -> None:
+        super().__init__()
+        self._coordinator = coordinator
+        self._slug = slug
+        self._attr_device_info = coordinator.device_info(slug)
+        self._attr_unique_id = f"{entry.entry_id}_{slug}_meal_status"
+        self._attr_name = "Meal analysis status"
+        self._attr_has_entity_name = True
+        self._attr_icon = "mdi:food-apple"
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        self._coordinator.add_listener(self._on_coordinator_update)
+        self.async_on_remove(
+            partial(self._coordinator.remove_listener, self._on_coordinator_update)
+        )
+
+    @callback
+    def _on_coordinator_update(self) -> None:
+        self.async_write_ha_state()
+
+    @property
+    def native_value(self) -> str:
+        status = self._coordinator.meal_analysis_status(self._slug)
+        return status.get("status", "idle")
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return dict(self._coordinator.meal_analysis_status(self._slug))
 
 
 class WellnessPendingSensor(SensorEntity):
