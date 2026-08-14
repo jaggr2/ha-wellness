@@ -22,7 +22,7 @@ PARTICIPANT_INTERVAL_DAYS = "interval_days"
 PARTICIPANT_DAY_OF_WEEK = "day_of_week"
 PARTICIPANT_TIME = "time"
 
-DEFAULT_MOUNT_PATH = "/mnt/data/supervisor/mounts/wellness"
+DEFAULT_MOUNT_PATH = "/share/wellness"
 DEFAULT_INTERVAL_DAYS = 7
 DEFAULT_DAY_OF_WEEK = 6  # Sunday (ISO weekday, Monday = 0)
 DEFAULT_TIME = "20:00"

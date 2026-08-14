@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Wellness",
-        "description": "Point to the mounted wellness data folder and choose which Home Assistant users participate. Each participant gets their own weight/waist entities and JSONL ledgers.",
+        "description": "Choose the wellness data folder (select one of your configured NAS mounts, or type a path) and which Home Assistant users participate. Each participant gets their own weight/waist entities and JSONL ledgers.",
         "data": {
           "mount_path": "Wellness data folder (mounted)",
           "participants": "Participants (HA users)"
@@ -31,3 +31,4 @@
     }
   }
 }
+

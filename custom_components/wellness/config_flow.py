@@ -9,13 +9,11 @@ import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult, OptionsFlow
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import (
     SelectSelector,
     SelectSelectorConfig,
     SelectSelectorMode,
-    TextSelector,
-    TextSelectorConfig,
-    TextSelectorType,
 )
 
 from .const import (
@@ -37,7 +35,59 @@ from .ledger import unique_slug
 
 
 def _path_writable(path: str) -> bool:
-    return os.path.isdir(path) and os.access(path, os.W_OK)
+    """Real write test (more reliable than os.access as root)."""
+    try:
+        probe = os.path.join(path, ".wellness-write-probe")
+        with open(probe, "w") as f:
+            f.write("ok")
+        os.remove(probe)
+        return True
+    except OSError:
+        return False
+
+
+async def _get_supervisor_mounts(hass: HomeAssistant) -> list[dict[str, Any]]:
+    """Return configured supervisor mounts (name/user_path/usage/state)."""
+    token = os.environ.get("SUPERVISOR_TOKEN")
+    if not token:
+        return []
+    session = async_get_clientsession(hass)
+    try:
+        async with session.get(
+            "http://supervisor/mounts",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=10,
+        ) as response:
+            if response.status != 200:
+                return []
+            data = await response.json()
+            return data.get("data", {}).get("mounts", [])
+    except Exception:  # noqa: BLE001 — best effort
+        return []
+
+
+async def _mount_options(hass: HomeAssistant) -> list[dict[str, str]]:
+    options = []
+    for mount in await _get_supervisor_mounts(hass):
+        name = mount.get("name")
+        path = mount.get("user_path")
+        if not name or not path:
+            continue
+        state = mount.get("state")
+        label = f"{name} → {path}"
+        if state and state != "active":
+            label += f" ({state})"
+        options.append({"value": path, "label": label})
+    return options
+
+
+async def _default_mount_path(hass: HomeAssistant) -> str:
+    for mount in await _get_supervisor_mounts(hass):
+        if mount.get("name") == "wellness" and mount.get("user_path"):
+            return mount["user_path"]
+        if mount.get("usage") == "share" and mount.get("user_path"):
+            return mount["user_path"]
+    return DEFAULT_MOUNT_PATH
 
 
 async def _active_users(hass: HomeAssistant) -> list[Any]:
@@ -99,10 +149,19 @@ class WellnessConfigFlow(ConfigFlow, domain=DOMAIN):
                     },
                 )
 
+        mount_options = await _mount_options(self.hass)
+        default_mount = await _default_mount_path(self.hass)
         schema = vol.Schema(
             {
-                vol.Required(CONF_MOUNT_PATH, default=DEFAULT_MOUNT_PATH): TextSelector(
-                    TextSelectorConfig(type=TextSelectorType.TEXT)
+                vol.Required(
+                    CONF_MOUNT_PATH, default=default_mount
+                ): SelectSelector(
+                    SelectSelectorConfig(
+                        options=mount_options,
+                        multiple=False,
+                        custom_value=True,
+                        mode=SelectSelectorMode.DROPDOWN,
+                    )
                 ),
                 vol.Required(CONF_PARTICIPANTS): SelectSelector(
                     SelectSelectorConfig(
@@ -176,12 +235,21 @@ class WellnessOptionsFlow(OptionsFlow):
             {"value": p[PARTICIPANT_SLUG], "label": p[PARTICIPANT_NAME]}
             for p in participants
         ]
+        mount_options = await _mount_options(self.hass)
+        default_mount = await _default_mount_path(self.hass)
         return vol.Schema(
             {
                 vol.Required(
                     CONF_MOUNT_PATH,
-                    default=data.get(CONF_MOUNT_PATH, DEFAULT_MOUNT_PATH),
-                ): TextSelector(TextSelectorConfig(type=TextSelectorType.TEXT)),
+                    default=data.get(CONF_MOUNT_PATH, default_mount),
+                ): SelectSelector(
+                    SelectSelectorConfig(
+                        options=mount_options,
+                        multiple=False,
+                        custom_value=True,
+                        mode=SelectSelectorMode.DROPDOWN,
+                    )
+                ),
                 vol.Optional("add_users", default=[]): SelectSelector(
                     SelectSelectorConfig(
                         options=add_options,
