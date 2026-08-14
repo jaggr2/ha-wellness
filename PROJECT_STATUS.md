@@ -1,7 +1,7 @@
 # Wellness — Project Status & Handoff
 
-> Last updated: 2026-08-14 · Author: Athena/Winston session with Roger
-> Repo: `jaggr2/ha-wellness` (public, HACS-ready) · Latest release: **v0.3.0**
+> Last updated: 2026-08-14 (evening session) · Author: Athena/Winston session with Roger
+> Repo: `jaggr2/ha-wellness` (public, HACS-ready) · Latest release: **v0.5.0**
 
 This file captures the current state, decisions, what has been built, and what
 remains — so work can be resumed (or handed to another agent) without losing
@@ -36,7 +36,7 @@ A multi-user health & meal tracker for Roger's home:
 | Scale assignment | Shared **weight sensors** (configured in options); auto-assign if exactly one participant's last weight is within **±5 kg** and **≤60 days** old; **0 or >1 candidates → ask**; **always explicit choice** (no pre-selection); dedup repeated pushes. |
 | "Ask" UX | Admins notified (`wellness_pending_weight` event + example automation); **assign card** resolves via dropdown; services `wellness.assign_weight` / `dismiss_weight`. |
 | Reminders | Per-participant **weekday + time + every-N-days** (default Sunday 20:00 / 7); integration fires `wellness_measurement_reminder`; notification is left to user automations. |
-| VLM provider | **Groq** (`llama-3.2-11b-vision-preview`, OpenAI-compatible). DeepSeek hosted API was **verified text-only** (rejected `image_url`) so it can't do vision. |
+| VLM provider | **Groq** (`qwen/qwen3.6-27b`, OpenAI-compatible). DeepSeek hosted API was **verified text-only** (rejected `image_url`) so it can't do vision. *(2026-08-14 evening: `llama-3.2-11b-vision-preview` was decommissioned by Groq — migrated to the only current Groq vision model, `qwen/qwen3.6-27b`.)* |
 | Units | Metric only (kg / cm). |
 | Scope | `wellness` domain, `single_config_entry`, HACS installable. |
 
@@ -113,31 +113,41 @@ A multi-user health & meal tracker for Roger's home:
 
 ---
 
-## 5. Current live state (verified 2026-08-14)
+## 5. Current live state (verified 2026-08-14 evening)
 
-- Config entry active on HA: mount `/share/wellness`, participants **`roger`** + **`derog_ha`**; 15 entities registered.
+- Config entry active on HA: mount `/share/wellness`, participants **`roger`** + **`derog_ha`**; entities registered (numbers, save buttons, statistics sensors, today-kcal/last-meal sensors, pending-assignments sensor).
 - Photo endpoint registered (401 unauthenticated as designed).
 - Core writes to the mount confirmed.
 - `body-metrics-roger.jsonl` contains a real manual entry (118.0 kg) — ledger pipeline proven.
 - Integration deployed to `/config/custom_components/wellness`; cards to `/config/www/`.
+- **Smart scale configured**: `sensor.s24plus_weight` (Samsung Health via S24+ Companion) enabled + set as the shared weight sensor. Full flow live-verified:
+  - auto-assign (117.8 kg → roger, ledger `source: scale, assigned_by: auto`),
+  - ambiguous reading → `sensor.pending_weight_assignments` + `wellness_pending_weight` event,
+  - `wellness.assign_weight` service → derog_ha ledger (`assigned_by: manual`).
+- **Groq live-verified**: `wellness.analyze_meals {user: roger}` against `essen_test_image.jpg` → full structured analysis (steak, white/green asparagus, hollandaise, red wine, Aperol Spritz, **720 kcal**) in `meal-analysis-roger.jsonl`; `today_kcal`/`last_meal` sensors updated.
+- **Wellness dashboard live** (sidebar tab `/wellness`): both cards render (`wellness-capture-card` + `wellness-assign-card`) via the global Lovelace resource collection, plus metrics + trend cards. No console errors.
+- **Example automations imported**: `automation.wellness_measurement_reminder` + `automation.wellness_pending_scale_reading` (both `on`); Roger wired to `notify.rogers24` (derog_ha has no Companion device yet).
 
 ### Version history (bug fixes worth knowing)
+- **0.4.0–0.4.2** — smart-scale hardening: `async_setup_weight_sensors()` was never awaited (subscription never registered); sensor values are now normalized to **kg** (g/lb/oz/st); the `number.*_body_weight` entity now mirrors coordinator changes so a scale auto-assign is reflected immediately.
+- **0.5.0** — Groq model migration (`qwen/qwen3.6-27b`, llama-vision decommissioned), `<think>`-block stripping in the analyzer, `max_tokens` raised (qwen reasons verbosely).
 - **0.1.1** — config flow: `MultiSelectSelector` doesn't exist in HA 2026.8 → `SelectSelector(multiple=True)`.
 - **0.1.2** — config flow: `async_get_users()` must be awaited (500 on flow init).
 - **0.1.3** — mount path selectable from configured NAS mounts; default `/share/wellness` (the old `/mnt/data/supervisor/mounts/...` path doesn't exist in the container namespace).
+
+### Cards / dashboard notes
+- Cards are deployed to `/config/www/wellness-{capture,assign}-card/`.
+- **Lovelace resources live in the global `lovelace_resources` collection** (`.storage/lovelace_resources`, served by the `lovelace/resources` websocket) — a `resources:` array inside a storage dashboard config is **ignored** on HA 2026.8. Both card modules are registered there.
+- Example dashboard YAML updated to the real entity IDs (`sensor.<user>_body_weight_statistics`, `sensor.pending_weight_assignments`).
 
 ---
 
 ## 6. Next steps (remaining)
 
-1. **Configure the smart scale** — *Wellness → Configure → Shared weight sensors* → pick the scale sensor; verify auto-assignment with a test reading.
-2. **Groq live smoke test** — needs a free **Groq API key** (https://console.groq.com/keys). Add it in options, then run `wellness.analyze_meals {user: roger}` against existing/new meal photos. Test image on hand: `C:\Users\roger\Downloads\essen_test_image.jpg`.
-3. **Cards on the dashboard** — register Lovelace resources:
-   - `/local/wellness-capture-card/wellness-capture-card.js`
-   - `/local/wellness-assign-card/wellness-assign-card.js`
-   - Build the Wellness view from `example-dashboard.yaml`.
-4. **Import example automations** — `example-automations/*.yaml`; fill in the `notify.mobile_app_<device>` entity IDs per user (reminder + pending-scale notify).
-5. **Optional hardening** — NFS fallback if the HA OS SMB mount fails to remount after reboots; consider versioning the HA `/config` in git.
+1. **Verify the scale feed in real life** — step on the shared scale once; Samsung Health → S24+ → `sensor.s24plus_weight` should auto-assign to `roger` (last weight 118.0 kg). Trigger a deliberately ambiguous reading only if you want to see the "ask" flow again.
+2. **Add derog_ha's Companion app** (when ready) so their reminder + pending-scale notifications work; fill `notify.mobile_app_<derog_ha_device>` in the automations (both example automations already have a commented placeholder).
+3. **Optional hardening** — NFS fallback if the HA OS SMB mount fails to remount after reboots; consider versioning the HA `/config` in git.
+4. HACS install path: the cards' `www/` resources can also be installed via HACS frontend repo so they auto-update; for now they're manually synced to `/config/www/`.
 
 ---
 
@@ -146,7 +156,7 @@ A multi-user health & meal tracker for Roger's home:
 | Secret | Where |
 |---|---|
 | Samba `homelab` password | `~/config/quadlets.env` on rack server (`USER=homelab;<pw>`) + HA OS mount config (`.storage`); **not in git** |
-| Groq API key | Not yet provided; add via Wellness options (stored in config entry `.storage`) |
+| Groq API key | **Configured** in the Wellness config entry `.storage` (added 2026-08-14); **not in git** — note it's stored in plaintext inside the HA config entry |
 | DeepSeek key (from earlier) | Valid but **not usable for vision** (hosted API is text-only); kept for other uses |
 
 ---
