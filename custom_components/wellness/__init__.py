@@ -18,6 +18,7 @@ from .const import (
     ATTR_USER,
     CONF_MOUNT_PATH,
     DOMAIN,
+    SERVICE_ANALYZE_MEALS,
     SERVICE_ASSIGN_WEIGHT,
     SERVICE_DISMISS_WEIGHT,
     SERVICE_SAVE_BODY_METRICS,
@@ -94,6 +95,13 @@ async def _async_register_services(hass: HomeAssistant) -> None:
         coordinator = _get_coordinator()
         await coordinator.async_dismiss_weight(call.data[ATTR_READING_ID])
 
+    async def _analyze_meals(call: ServiceCall) -> None:
+        coordinator = _get_coordinator()
+        slug = call.data[ATTR_USER]
+        if coordinator.get_participant(slug) is None:
+            raise HomeAssistantError(f"No wellness participant with slug '{slug}'")
+        await coordinator.analyze_meals(slug, limit=int(call.data.get("limit", 5)))
+
     service.async_register_admin_service(
         hass,
         DOMAIN,
@@ -116,4 +124,16 @@ async def _async_register_services(hass: HomeAssistant) -> None:
         SERVICE_DISMISS_WEIGHT,
         _dismiss_weight,
         schema=vol.Schema({vol.Required(ATTR_READING_ID): cv.string}),
+    )
+    service.async_register_admin_service(
+        hass,
+        DOMAIN,
+        SERVICE_ANALYZE_MEALS,
+        _analyze_meals,
+        schema=vol.Schema(
+            {
+                vol.Required(ATTR_USER): cv.string,
+                vol.Optional("limit", default=5): cv.positive_int,
+            }
+        ),
     )

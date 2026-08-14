@@ -9,10 +9,8 @@ Multi-user wellness tracking for Home Assistant.
 - **Meal photos** — an authenticated `POST /api/wellness/photo` endpoint + a camera card. The participant is resolved from the logged-in HA account, so each person just opens their own app and taps. Photos land in `food-photos/<user>/YYYY/MM/DD/…` with a `meal-log-<user>.jsonl` entry.
 - **Smart-scale assignment** — connect your shared weight sensor(s) in the options. Readings are auto-assigned to a participant when unambiguous (last weight within **±5 kg** and ≤ **60 days** old); otherwise a pending reading is created, the `wellness_pending_weight` event fires (for admin notification), and `sensor.wellness_pending` + the **assign card** let you resolve it explicitly. Deduplicated against repeated pushes.
 - **Reminders** — per-participant schedule (weekday + time + every-N-days, default Sunday 20:00 weekly); the integration fires `wellness_measurement_reminder` for you to notify via your own automation.
+- **VLM meal analysis (Groq)** — `wellness.analyze_meals` runs Groq `llama-vision` on new meal photos and stores structured analysis (`food`, `beverages`, amounts, `estimated_kcal_total` + per item) in `meal-analysis-<user>.jsonl`, with per-participant **Today kcal** and **Last meal** sensors.
 - **Multi-user** — every participant is a Home Assistant account; each gets their own device, entities and ledgers.
-
-### Roadmap
-- **VLM meal analysis** — Groq (llama-vision) detects food & beverages, estimates amounts and kcal.
 
 ## Installation
 
@@ -38,13 +36,19 @@ During setup you provide:
 - **Wellness data folder** — pick one of your configured NAS mounts (or type a path). Default `wellness → /share/wellness`.
 - **Participants** — the Home Assistant users taking part (one account per person).
 
-In **Configure** you can: add/remove participants, edit a participant's name + measurement schedule, and select **shared weight sensors** (the smart scale(s)) that feed auto-assignment.
+In **Configure** you can: add/remove participants, edit a participant's name + measurement schedule, select **shared weight sensors** (the smart scale(s)) that feed auto-assignment, and set the **Groq API key + vision model** for meal analysis.
+
+### Meal analysis (Groq)
+1. Get a free key at https://console.groq.com/keys (Groq offers a free tier).
+2. In **Configure** → paste the key (model default `llama-3.2-11b-vision-preview`).
+3. Run `wellness.analyze_meals {user: roger}` (or an automation on the `wellness_meal_logged` event) — unanalyzed meal photos are sent to Groq and the result stored.
 
 ### Data layout
 ```
 <mount>/wellness/
 ├── body-metrics-<user>.jsonl   {"ts","weight_kg","waist_cm","source","assigned_by","sensor_id"}
 ├── meal-log-<user>.jsonl       {"ts","photo","source"}
+├── meal-analysis-<user>.jsonl  {"ts","photo","food","beverages","estimated_kcal_total","…"}
 └── food-photos/<user>/YYYY/MM/DD/*.jpg
 ```
 
@@ -59,6 +63,7 @@ Services:
 - `wellness.save_body_metrics` — `{user: <slug>}`
 - `wellness.assign_weight` — `{reading_id, user: <slug>}`
 - `wellness.dismiss_weight` — `{reading_id}`
+- `wellness.analyze_meals` — `{user: <slug>, limit?: <n>}` (Groq vision)
 
 Example automations (reminder + pending-scale notification) and a dashboard are in `example-automations/` and `example-dashboard.yaml`.
 

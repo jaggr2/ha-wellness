@@ -25,10 +25,13 @@ from homeassistant.helpers.selector import (
 )
 
 from .const import (
+    CONF_GROQ_API_KEY,
+    CONF_GROQ_MODEL,
     CONF_MOUNT_PATH,
     CONF_PARTICIPANTS,
     CONF_WEIGHT_SENSORS,
     DEFAULT_DAY_OF_WEEK,
+    DEFAULT_GROQ_MODEL,
     DEFAULT_INTERVAL_DAYS,
     DEFAULT_MOUNT_PATH,
     DEFAULT_TIME,
@@ -212,6 +215,10 @@ class WellnessOptionsFlow(OptionsFlow):
             data = {**self._config_entry.data}
             data[CONF_MOUNT_PATH] = user_input[CONF_MOUNT_PATH]
             data[CONF_WEIGHT_SENSORS] = list(user_input.get("weight_sensors", []))
+            if user_input.get(CONF_GROQ_API_KEY):
+                data[CONF_GROQ_API_KEY] = user_input[CONF_GROQ_API_KEY]
+            if user_input.get(CONF_GROQ_MODEL):
+                data[CONF_GROQ_MODEL] = user_input[CONF_GROQ_MODEL]
 
             participants = list(data.get(CONF_PARTICIPANTS, []))
             slugs = {p[PARTICIPANT_SLUG] for p in participants}
@@ -361,5 +368,13 @@ class WellnessOptionsFlow(OptionsFlow):
                     "weight_sensors",
                     default=data.get(CONF_WEIGHT_SENSORS, []),
                 ): EntitySelector(EntitySelectorConfig(domain="sensor"), multiple=True),
+                vol.Optional(
+                    CONF_GROQ_API_KEY,
+                    default=data.get(CONF_GROQ_API_KEY, ""),
+                ): TextSelector(TextSelectorConfig(type=TextSelectorType.PASSWORD)),
+                vol.Optional(
+                    CONF_GROQ_MODEL,
+                    default=data.get(CONF_GROQ_MODEL, DEFAULT_GROQ_MODEL),
+                ): TextSelector(TextSelectorConfig(type=TextSelectorType.TEXT)),
             }
         )

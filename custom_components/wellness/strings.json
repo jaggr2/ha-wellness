@@ -18,13 +18,15 @@
     "step": {
       "init": {
         "title": "Wellness options",
-        "description": "Add/remove participants, edit schedules, and pick the shared weight sensors (smart scale) that feed auto-assignment.",
+        "description": "Add/remove participants, edit schedules, pick shared weight sensors, and configure Groq meal analysis.",
         "data": {
           "mount_path": "Wellness data folder (mounted)",
           "add_users": "Add participants (HA users)",
           "remove_participants": "Remove participants",
           "edit_slug": "Edit participant (name / schedule)",
-          "weight_sensors": "Shared weight sensors (smart scale)"
+          "weight_sensors": "Shared weight sensors (smart scale)",
+          "groq_api_key": "Groq API key (meal analysis)",
+          "groq_model": "Groq vision model"
         }
       },
       "edit": {

@@ -7,6 +7,7 @@ photo ingestion, and per-participant measurement reminders.
 
 from __future__ import annotations
 
+import logging
 import secrets
 import time
 import uuid
@@ -18,23 +19,30 @@ from typing import Any, Callable
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.event import async_call_later, async_track_state_change_event
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
+from .analyzer import analyze_photo
 from .assignment import find_assignee, should_ignore
 from .const import (
     ATTR_READING_ID,
     ATTR_SENSOR_ID,
     ATTR_USER,
     ATTR_WEIGHT,
+    CONF_GROQ_API_KEY,
+    CONF_GROQ_MODEL,
     CONF_MOUNT_PATH,
     CONF_PARTICIPANTS,
     CONF_WEIGHT_SENSORS,
+    DEFAULT_GROQ_MODEL,
     DEFAULT_MOUNT_PATH,
     DOMAIN,
     EVENT_MEASUREMENT_REMINDER,
+    EVENT_MEAL_ANALYZED,
+    EVENT_MEAL_LOGGED,
     EVENT_PENDING_WEIGHT,
     EVENT_WEIGHT_ASSIGNED,
     MANUFACTURER,
@@ -48,9 +56,18 @@ from .const import (
     PHOTO_EXTENSIONS,
     WEIGHT_KIND,
 )
-from .ledger import append_body_metrics, append_jsonl, read_last_line, write_photo
+from .ledger import (
+    append_body_metrics,
+    append_jsonl,
+    read_last_line,
+    read_lines,
+    read_photo,
+    write_photo,
+)
 
 type Listener = Callable[[], None]
+
+_LOGGER = logging.getLogger(__name__)
 
 
 def _seconds_until_next(day_of_week: int, time_str: str) -> float:
@@ -82,6 +99,9 @@ class WellnessCoordinator:
         # subscription / timer handles
         self._weight_unsub: Callable[[], None] | None = None
         self._reminder_unsubs: list[Callable[[], None]] = []
+        # per-user meal analysis aggregates
+        self._today_kcal: dict[str, float] = {}
+        self._last_meal: dict[str, str] = {}
 
     # ------------------------------------------------------------------
     # Config accessors
@@ -338,7 +358,102 @@ class WellnessCoordinator:
         await self.hass.async_add_executor_job(
             append_jsonl, str(self.ledger_path(slug, "meal-log")), record
         )
+        self.hass.bus.async_fire(
+            EVENT_MEAL_LOGGED,
+            {ATTR_USER: slug, "photo": str(rel_dir / filename)},
+        )
         return str(rel_dir / filename)
+
+    # ------------------------------------------------------------------
+    # VLM meal analysis (Groq)
+    # ------------------------------------------------------------------
+    def _groq_credentials(self) -> tuple[str, str] | None:
+        api_key = self.entry.data.get(CONF_GROQ_API_KEY)
+        if not api_key:
+            return None
+        return api_key, self.entry.data.get(CONF_GROQ_MODEL, DEFAULT_GROQ_MODEL)
+
+    async def analyze_meals(self, slug: str, limit: int = 5) -> int:
+        """Analyze new meal photos for a participant with Groq vision.
+
+        Returns the number of photos analyzed. Raises HomeAssistantError if
+        no Groq API key is configured.
+        """
+        credentials = self._groq_credentials()
+        if credentials is None:
+            raise HomeAssistantError(
+                "Groq API key not configured — add it in Wellness options"
+            )
+        api_key, model = credentials
+
+        meals = await self.hass.async_add_executor_job(
+            read_lines, str(self.ledger_path(slug, "meal-log"))
+        )
+        analyzed = {
+            record.get("photo")
+            for record in await self.hass.async_add_executor_job(
+                read_lines, str(self.ledger_path(slug, "meal-analysis"))
+            )
+            if record.get("photo")
+        }
+        candidates = [m for m in meals if m.get("photo") and m["photo"] not in analyzed]
+        candidates = candidates[-limit:]
+
+        session = async_get_clientsession(self.hass)
+        analyzed_count = 0
+        for meal in candidates:
+            photo_rel = meal["photo"]
+            abs_path = self.mount_path / photo_rel
+            try:
+                photo_bytes = await self.hass.async_add_executor_job(
+                    read_photo, str(abs_path)
+                )
+                analysis = await analyze_photo(session, api_key, model, photo_bytes)
+            except (OSError, RuntimeError) as err:
+                _LOGGER.warning(
+                    "Meal analysis failed for %s/%s: %s", slug, photo_rel, err
+                )
+                continue
+            await self.hass.async_add_executor_job(
+                append_jsonl,
+                str(self.ledger_path(slug, "meal-analysis")),
+                {"ts": dt_util.utcnow().isoformat(), "photo": photo_rel, **analysis},
+            )
+            analyzed_count += 1
+            await self._async_refresh_meal_aggregates(slug)
+            self.hass.bus.async_fire(
+                EVENT_MEAL_ANALYZED,
+                {
+                    ATTR_USER: slug,
+                    "photo": photo_rel,
+                    "estimated_kcal_total": analysis.get("estimated_kcal_total", 0),
+                },
+            )
+        return analyzed_count
+
+    async def _async_refresh_meal_aggregates(self, slug: str) -> None:
+        """Recompute today's kcal + last meal for a participant."""
+        today = dt_util.now().date().isoformat()
+        total = 0.0
+        last_desc = ""
+        for record in await self.hass.async_add_executor_job(
+            read_lines, str(self.ledger_path(slug, "meal-analysis"))
+        ):
+            ts = record.get("ts", "")
+            if ts.startswith(today):
+                total += float(record.get("estimated_kcal_total", 0.0))
+            if record.get("food") and not last_desc:
+                items = [f.get("item", "") for f in record["food"] if f.get("item")]
+                last_desc = ", ".join(items) or "meal"
+        self._today_kcal[slug] = round(total, 1)
+        self._last_meal[slug] = last_desc
+        self._notify_listeners()
+
+    def today_kcal(self, slug: str) -> float:
+        return self._today_kcal.get(slug, 0.0)
+
+    def last_meal(self, slug: str) -> str:
+        return self._last_meal.get(slug, "—")
 
     # ------------------------------------------------------------------
     # Measurement reminders

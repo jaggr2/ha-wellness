@@ -15,6 +15,9 @@ PLATFORMS = ["number", "sensor", "button"]
 CONF_MOUNT_PATH = "mount_path"
 CONF_PARTICIPANTS = "participants"
 CONF_WEIGHT_SENSORS = "weight_sensors"
+CONF_GROQ_API_KEY = "groq_api_key"
+CONF_GROQ_MODEL = "groq_model"
+DEFAULT_GROQ_MODEL = "llama-3.2-11b-vision-preview"
 
 PARTICIPANT_HA_USER_ID = "ha_user_id"
 PARTICIPANT_NAME = "name"
@@ -37,10 +40,13 @@ MAX_AGE_DAYS = 60
 EVENT_MEASUREMENT_REMINDER = "wellness_measurement_reminder"
 EVENT_PENDING_WEIGHT = "wellness_pending_weight"
 EVENT_WEIGHT_ASSIGNED = "wellness_weight_assigned"
+EVENT_MEAL_LOGGED = "wellness_meal_logged"
+EVENT_MEAL_ANALYZED = "wellness_meal_analyzed"
 
 SERVICE_SAVE_BODY_METRICS = "save_body_metrics"
 SERVICE_ASSIGN_WEIGHT = "assign_weight"
 SERVICE_DISMISS_WEIGHT = "dismiss_weight"
+SERVICE_ANALYZE_MEALS = "analyze_meals"
 
 ATTR_USER = "user"
 ATTR_READING_ID = "reading_id"

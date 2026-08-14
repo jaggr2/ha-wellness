@@ -38,3 +38,24 @@ dismiss_weight:
       required: true
       selector:
         text:
+
+analyze_meals:
+  name: Analyze meals
+  description: Run Groq vision on new meal photos and store food/beverage/amount/kcal analysis.
+  fields:
+    user:
+      name: User
+      description: Wellness participant slug whose unanalyzed meal photos should be processed.
+      required: true
+      example: roger
+      selector:
+        text:
+    limit:
+      name: Limit
+      description: Maximum number of photos to analyze (default 5).
+      default: 5
+      selector:
+        number:
+          min: 1
+          max: 50
+          mode: box
