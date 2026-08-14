@@ -14,6 +14,25 @@ from typing import Any
 # {slug: (last_weight_kg, last_ts_epoch)}
 WeightHistory = dict[str, tuple[float | None, float | None]]
 
+# Mass units (lowercase, without whitespace) -> kg factor.
+_UNIT_TO_KG: dict[str, float] = {
+    "g": 0.001,
+    "kg": 1.0,
+    "lb": 0.45359237,
+    "lbs": 0.45359237,
+    "oz": 0.028349523125,
+    "st": 6.35029318,
+    "stone": 6.35029318,
+}
+
+
+def to_kg(value: float, unit: str | None) -> float:
+    """Convert a weight reading to kg given its unit_of_measurement."""
+    if not unit:
+        return value
+    factor = _UNIT_TO_KG.get(unit.strip().lower())
+    return value * factor if factor is not None else value
+
 
 def should_ignore(
     value: float,

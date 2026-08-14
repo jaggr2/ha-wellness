@@ -26,7 +26,7 @@ from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
 from .analyzer import analyze_photo
-from .assignment import find_assignee, should_ignore
+from .assignment import find_assignee, should_ignore, to_kg
 from .const import (
     ATTR_READING_ID,
     ATTR_SENSOR_ID,
@@ -237,9 +237,12 @@ class WellnessCoordinator:
         if new_state is None or new_state.state in (None, "unknown", "unavailable"):
             return
         try:
-            value = float(new_state.state)
+            raw_value = float(new_state.state)
         except (TypeError, ValueError):
             return
+        # Normalize to kg: scales may report g, lb, oz, etc.
+        unit = new_state.attributes.get("unit_of_measurement")
+        value = to_kg(raw_value, unit)
         sensor_id = new_state.entity_id
         now = time.time()
         last = self._last_weight.get(sensor_id)
