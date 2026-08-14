@@ -21,6 +21,7 @@ views:
 
       - type: custom:wellness-meal-log-card
         title: Recent meals
+        limit: 10
 
       - type: entities
         title: Roger — calories

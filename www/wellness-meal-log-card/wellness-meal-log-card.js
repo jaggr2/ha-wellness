@@ -42,7 +42,7 @@ class WellnessMealLogCard extends HTMLElement {
     try {
       const token = this._accessToken();
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
-      const resp = await fetch("/api/wellness/meals?limit=" + (this._config.limit || 20), { headers });
+      const resp = await fetch("/api/wellness/meals?limit=" + (this._config.limit || 10), { headers });
       if (!resp.ok) {
         let msg = `HTTP ${resp.status}`;
         try { const j = await resp.json(); msg = j.message || j.error || msg; } catch (_) {}
