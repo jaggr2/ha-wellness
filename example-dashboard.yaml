@@ -28,21 +28,19 @@ views:
       - type: custom:long-term-statistics
         title: Weight trend
         entities:
-          - sensor.roger_body_weight
+          - sensor.roger_body_weight_statistics
         chart_type: line
         unit: kg
 
       - type: custom:long-term-statistics
         title: Waist trend
         entities:
-          - sensor.roger_waist
+          - sensor.roger_waist_statistics
         chart_type: line
         unit: cm
 
-      # Recent meal photos (from the NAS mount via the media source / picture)
-      - type: picture-glance
-        title: Recent meal
-        camera_image: /api/wellness/photo
-        # A media-source card showing the food-photos folder works too:
-        # type: media-source
-        # media_content_id: media-source://media_source/local/food-photos/roger
+      # Recent meal photos live on the NAS mount; browse them with a
+      # media-source card (media source must be configured) or show the
+      # latest captured photo from your camera card's thumbnail. Example:
+      # - type: media-source
+      #   media_content_id: media-source://media_source/local/food-photos/roger

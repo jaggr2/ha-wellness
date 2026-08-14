@@ -22,7 +22,7 @@ class WellnessAssignCard extends HTMLElement {
 
   _pending() {
     if (!this._hass) return [];
-    const st = this._hass.states["sensor.wellness_pending"];
+    const st = this._hass.states["sensor.pending_weight_assignments"];
     if (!st || !st.attributes || !st.attributes.pending) return [];
     return st.attributes.pending;
   }
