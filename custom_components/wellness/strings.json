@@ -23,8 +23,9 @@
           "mount_path": "Wellness data folder (mounted)",
           "add_users": "Add participants (HA users)",
           "remove_participants": "Remove participants",
-          "edit_slug": "Edit participant (name / schedule)",
+          "edit_slug": "Edit participant (name / schedule / kcal target)",
           "weight_sensors": "Shared weight sensors (smart scale)",
+          "min_meal_gap_min": "Meal gap considered 'too frequent' (minutes)",
           "groq_api_key": "Groq API key (meal analysis)",
           "groq_model": "Groq vision model"
         }

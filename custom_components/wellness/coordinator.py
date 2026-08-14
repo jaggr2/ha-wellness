@@ -40,11 +40,13 @@ from .const import (
     ATTR_WEIGHT,
     CONF_GROQ_API_KEY,
     CONF_GROQ_MODEL,
+    CONF_MIN_MEAL_GAP_MIN,
     CONF_MOUNT_PATH,
     CONF_PARTICIPANTS,
     CONF_WEIGHT_SENSORS,
     DEFAULT_DAILY_KCAL_TARGET,
     DEFAULT_GROQ_MODEL,
+    DEFAULT_MIN_MEAL_GAP_MIN,
     DEFAULT_MOUNT_PATH,
     DOMAIN,
     EVENT_MEASUREMENT_REMINDER,
@@ -117,6 +119,8 @@ class WellnessCoordinator:
         self._last_meal: dict[str, str] = {}
         # latest analysis activity (for the status sensor): slug -> record
         self._analysis_status: dict[str, dict[str, Any]] = {}
+        # cached eating-regularity stats (refreshed off the event loop)
+        self._regularity: dict[str, dict[str, Any]] = {}
 
     # ------------------------------------------------------------------
     # Config accessors
@@ -382,6 +386,7 @@ class WellnessCoordinator:
         )
         # Kick off Groq analysis automatically so results show without a manual step.
         self.hass.async_create_task(self._async_auto_analyze_after_log(slug))
+        self.hass.async_create_task(self.async_refresh_regularity(slug))
         return str(rel_dir / filename)
 
     async def _async_auto_analyze_after_log(self, slug: str) -> None:
@@ -510,10 +515,11 @@ class WellnessCoordinator:
         return self._last_meal.get(slug, "—")
 
     async def async_restore_meal_aggregates(self) -> None:
-        """Recompute today-kcal/last-meal from the analysis ledgers at startup."""
+        """Recompute today-kcal/last-meal and eating regularity at startup."""
         for participant in self.participants:
             slug = participant[PARTICIPANT_SLUG]
             await self._async_refresh_meal_aggregates(slug)
+        await self.async_refresh_regularity()
         self._notify_listeners()
 
     # ------------------------------------------------------------------
@@ -588,6 +594,7 @@ class WellnessCoordinator:
         self.hass.bus.async_fire(
             EVENT_MEAL_DELETED, {ATTR_USER: slug, ATTR_PHOTO: photo}
         )
+        self.hass.async_create_task(self.async_refresh_regularity(slug))
         self._notify_listeners()
         return True
 
@@ -608,23 +615,38 @@ class WellnessCoordinator:
         return sorted(times)
 
     def eating_regularity(self, slug: str) -> dict[str, Any]:
-        """Stats about eating frequency for a participant."""
+        """Return the cached eating-frequency stats for a participant."""
+        return self._regularity.get(slug, {})
+
+    async def async_refresh_regularity(self, slug: str | None = None) -> None:
+        """Recompute eating-frequency stats off the event loop and notify."""
+        slugs = [slug] if slug else [p[PARTICIPANT_SLUG] for p in self.participants]
+        for s in slugs:
+            result = await self.hass.async_add_executor_job(
+                self._compute_regularity, s
+            )
+            self._regularity[s] = result
+        self._notify_listeners()
+
+    def _compute_regularity(self, slug: str) -> dict[str, Any]:
+        """Read the meal ledger and build regularity stats (executor-safe)."""
+        times = self._meal_times(slug)
+        min_gap_minutes = float(
+            self.entry.data.get(CONF_MIN_MEAL_GAP_MIN, DEFAULT_MIN_MEAL_GAP_MIN)
+        )
         result = _ledger_regularity(
-            self._meal_times(slug),
+            times,
             now=time.time(),
             today_start_epoch=dt_util.start_of_local_day(dt_util.now()).timestamp(),
+            min_gap_minutes=min_gap_minutes,
         )
-        # Add today's meal times as local HH:MM for the UI.
         today_start = dt_util.start_of_local_day(dt_util.now()).timestamp()
-        today_times = [
-            t
-            for t in self._meal_times(slug)
-            if t >= today_start and t <= time.time() + 60
-        ]
+        today_times = [t for t in times if t >= today_start and t <= time.time() + 60]
         result["meal_times_today"] = [
             dt_util.as_local(dt_util.utc_from_timestamp(t)).strftime("%H:%M")
             for t in today_times
         ]
+        result["min_gap_threshold_min"] = min_gap_minutes
         return result
 
     # ------------------------------------------------------------------
@@ -642,8 +664,8 @@ class WellnessCoordinator:
             timedelta(minutes=10),
         )
 
-    @callback
-    def _async_daily_refresh(self, _now) -> None:
+    async def _async_daily_refresh(self, _now) -> None:
+        await self.async_refresh_regularity()
         self._notify_listeners()
 
     def _schedule_reminder(self, participant: dict[str, Any]) -> None:

@@ -103,3 +103,14 @@ def test_eating_regularity_yesterday_excluded():
     times = [4 * 3600.0, 8 * 3600.0, 9 * 3600.0]
     r = ledger.eating_regularity(times, now=now, today_start_epoch=today_start)
     assert r["meals_today"] == 2  # 08:00 + 09:00
+
+
+def test_eating_regularity_threshold_configurable():
+    now = 13 * 3600.0
+    times = [8 * 3600.0, 9.5 * 3600.0]  # 90 min gap
+    # default threshold (120) -> too frequent
+    r = ledger.eating_regularity(times, now=now, today_start_epoch=0.0)
+    assert r["too_frequent"] is True
+    # stricter threshold (60) -> not too frequent
+    r = ledger.eating_regularity(times, now=now, today_start_epoch=0.0, min_gap_minutes=60)
+    assert r["too_frequent"] is False

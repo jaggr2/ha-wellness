@@ -17,7 +17,9 @@ CONF_PARTICIPANTS = "participants"
 CONF_WEIGHT_SENSORS = "weight_sensors"
 CONF_GROQ_API_KEY = "groq_api_key"
 CONF_GROQ_MODEL = "groq_model"
+CONF_MIN_MEAL_GAP_MIN = "min_meal_gap_min"
 DEFAULT_GROQ_MODEL = "qwen/qwen3.6-27b"
+DEFAULT_MIN_MEAL_GAP_MIN = 120
 
 PARTICIPANT_HA_USER_ID = "ha_user_id"
 PARTICIPANT_NAME = "name"
@@ -37,10 +39,6 @@ DEFAULT_DAILY_KCAL_TARGET = 2000
 MAX_DELTA_KG = 5.0
 # Stale baselines (> 60 days) don't count as assignment candidates.
 MAX_AGE_DAYS = 60
-
-# Eating-regularity heuristic: a gap shorter than this (minutes) between two
-# meals counts as "too frequent" (snacking).
-MIN_MEAL_GAP_MIN = 120
 
 # Event names fired by the integration.
 EVENT_MEASUREMENT_REMINDER = "wellness_measurement_reminder"

@@ -27,6 +27,7 @@ from homeassistant.helpers.selector import (
 from .const import (
     CONF_GROQ_API_KEY,
     CONF_GROQ_MODEL,
+    CONF_MIN_MEAL_GAP_MIN,
     CONF_MOUNT_PATH,
     CONF_PARTICIPANTS,
     CONF_WEIGHT_SENSORS,
@@ -34,6 +35,7 @@ from .const import (
     DEFAULT_DAY_OF_WEEK,
     DEFAULT_GROQ_MODEL,
     DEFAULT_INTERVAL_DAYS,
+    DEFAULT_MIN_MEAL_GAP_MIN,
     DEFAULT_MOUNT_PATH,
     DEFAULT_TIME,
     DOMAIN,
@@ -218,6 +220,7 @@ class WellnessOptionsFlow(OptionsFlow):
             data = {**self._config_entry.data}
             data[CONF_MOUNT_PATH] = user_input[CONF_MOUNT_PATH]
             data[CONF_WEIGHT_SENSORS] = list(user_input.get("weight_sensors", []))
+            data[CONF_MIN_MEAL_GAP_MIN] = int(user_input.get(CONF_MIN_MEAL_GAP_MIN, DEFAULT_MIN_MEAL_GAP_MIN))
             if user_input.get(CONF_GROQ_API_KEY):
                 data[CONF_GROQ_API_KEY] = user_input[CONF_GROQ_API_KEY]
             if user_input.get(CONF_GROQ_MODEL):
@@ -381,7 +384,8 @@ class WellnessOptionsFlow(OptionsFlow):
                 ),
                 vol.Optional("edit_slug", default=""): SelectSelector(
                     SelectSelectorConfig(
-                        options=edit_options,
+                        options=[{"value": "", "label": "— no edit —"}]
+                        + edit_options,
                         multiple=False,
                         mode=SelectSelectorMode.DROPDOWN,
                     )
@@ -389,7 +393,21 @@ class WellnessOptionsFlow(OptionsFlow):
                 vol.Optional(
                     "weight_sensors",
                     default=data.get(CONF_WEIGHT_SENSORS, []),
-                ): EntitySelector(EntitySelectorConfig(domain="sensor"), multiple=True),
+                ): EntitySelector(EntitySelectorConfig(domain="sensor", multiple=True)),
+                vol.Optional(
+                    CONF_MIN_MEAL_GAP_MIN,
+                    default=int(
+                        data.get(CONF_MIN_MEAL_GAP_MIN, DEFAULT_MIN_MEAL_GAP_MIN)
+                    ),
+                ): NumberSelector(
+                    NumberSelectorConfig(
+                        min=30,
+                        max=480,
+                        step=10,
+                        mode=NumberSelectorMode.BOX,
+                        unit_of_measurement="min",
+                    )
+                ),
                 vol.Optional(
                     CONF_GROQ_API_KEY,
                     default=data.get(CONF_GROQ_API_KEY, ""),
