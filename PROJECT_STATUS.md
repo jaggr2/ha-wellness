@@ -1,7 +1,7 @@
 # Wellness — Project Status & Handoff
 
 > Last updated: 2026-08-14 (evening session) · Author: Athena/Winston session with Roger
-> Repo: `jaggr2/ha-wellness` (public, HACS-ready) · Latest release: **v0.5.0**
+> Repo: `jaggr2/ha-wellness` (public, HACS-ready) · Latest release: **v0.6.2**
 
 This file captures the current state, decisions, what has been built, and what
 remains — so work can be resumed (or handed to another agent) without losing
@@ -88,8 +88,10 @@ A multi-user health & meal tracker for Roger's home:
 **Reminders**
 - Per-participant schedule from options; `_seconds_until_next` computes next (weekday, time); fires `wellness_measurement_reminder`; reschedules every-N-days.
 
-**Groq analysis**
+**Groq meal analysis**
 - `wellness.analyze_meals {user, limit}` — reads unanalyzed meal-log photos, sends to Groq vision, stores structured analysis in `meal-analysis-<user>.jsonl`, updates today-kcal/last-meal sensors, fires `wellness_meal_analyzed`.
+- **Auto-analysis (v0.6.0+)** — a meal photo upload automatically triggers Groq analysis (`limit=1`) ~2s after the log; per-user **Meal analysis status** sensor (`sensor.<user>_meal_analysis_status`, `analyzing`/`done`/`error` with `photo`/`kcal`/`food`/`error` attributes); the capture card shows "Photo saved → Analyzing… → Analyzed · N kcal (+ food list)" by matching the status sensor's `photo` attribute to the upload response.
+- Aggregates (today-kcal / last-meal) are recomputed from the ledgers at startup (`async_restore_meal_aggregates`).
 
 **Events**: `wellness_measurement_reminder` · `wellness_pending_weight` · `wellness_weight_assigned` · `wellness_meal_logged` · `wellness_meal_analyzed`
 
@@ -127,10 +129,12 @@ A multi-user health & meal tracker for Roger's home:
 - **Groq live-verified**: `wellness.analyze_meals {user: roger}` against `essen_test_image.jpg` → full structured analysis (steak, white/green asparagus, hollandaise, red wine, Aperol Spritz, **720 kcal**) in `meal-analysis-roger.jsonl`; `today_kcal`/`last_meal` sensors updated.
 - **Wellness dashboard live** (sidebar tab `/wellness`): both cards render (`wellness-capture-card` + `wellness-assign-card`) via the global Lovelace resource collection, plus metrics + trend cards. No console errors.
 - **Example automations imported**: `automation.wellness_measurement_reminder` + `automation.wellness_pending_scale_reading` (both `on`); Roger wired to `notify.rogers24` (derog_ha has no Companion device yet).
+- **Auto meal analysis live**: a real photo uploaded from the Companion app (banana quark) was stored and auto-analyzed (120 kcal); status flow verified `analyzing → done` with `kcal`+`food` attributes; capture card verified rendering "Analyzed · N kcal".
 
 ### Version history (bug fixes worth knowing)
-- **0.4.0–0.4.2** — smart-scale hardening: `async_setup_weight_sensors()` was never awaited (subscription never registered); sensor values are now normalized to **kg** (g/lb/oz/st); the `number.*_body_weight` entity now mirrors coordinator changes so a scale auto-assign is reflected immediately.
+- **0.6.0–0.6.2** — auto-analysis on meal upload (uses `asyncio.sleep`, not `hass.async_sleep` which doesn't exist), per-user `Meal analysis status` sensor, capture-card progress/result feedback, aggregates restored from ledger at startup. Card auth token read from `hass.auth.data.access_token`.
 - **0.5.0** — Groq model migration (`qwen/qwen3.6-27b`, llama-vision decommissioned), `<think>`-block stripping in the analyzer, `max_tokens` raised (qwen reasons verbosely).
+- **0.4.0–0.4.2** — smart-scale hardening: `async_setup_weight_sensors()` was never awaited (subscription never registered); sensor values are now normalized to **kg** (g/lb/oz/st); the `number.*_body_weight` entity now mirrors coordinator changes so a scale auto-assign is reflected immediately.
 - **0.1.1** — config flow: `MultiSelectSelector` doesn't exist in HA 2026.8 → `SelectSelector(multiple=True)`.
 - **0.1.2** — config flow: `async_get_users()` must be awaited (500 on flow init).
 - **0.1.3** — mount path selectable from configured NAS mounts; default `/share/wellness` (the old `/mnt/data/supervisor/mounts/...` path doesn't exist in the container namespace).
