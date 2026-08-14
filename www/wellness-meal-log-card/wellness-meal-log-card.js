@@ -10,6 +10,7 @@ class WellnessMealLogCard extends HTMLElement {
   setConfig(config) {
     this._config = config || {};
     this._meals = [];
+    this._thumbs = {};
     this._loading = false;
     this._error = "";
   }
@@ -42,7 +43,10 @@ class WellnessMealLogCard extends HTMLElement {
     try {
       const token = this._accessToken();
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
-      const resp = await fetch("/api/wellness/meals?limit=" + (this._config.limit || 10), { headers });
+      const params = new URLSearchParams();
+      params.set("limit", String(this._config.limit || 10));
+      if (this._config.user) params.set("user", this._config.user);
+      const resp = await fetch("/api/wellness/meals?" + params.toString(), { headers });
       if (!resp.ok) {
         let msg = `HTTP ${resp.status}`;
         try { const j = await resp.json(); msg = j.message || j.error || msg; } catch (_) {}
@@ -55,16 +59,39 @@ class WellnessMealLogCard extends HTMLElement {
     }
     this._loading = false;
     this._render();
+    this._loadThumbs();
+  }
+
+  async _loadThumbs() {
+    const token = this._accessToken();
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    for (const meal of this._meals) {
+      if (!meal.photo || this._thumbs && this._thumbs[meal.photo]) continue;
+      const params = new URLSearchParams({ path: meal.photo });
+      if (this._config.user) params.set("user", this._config.user);
+      try {
+        const resp = await fetch("/api/wellness/photo?" + params.toString(), { headers });
+        if (!resp.ok) continue;
+        const blob = await resp.blob();
+        if (!this._thumbs) this._thumbs = {};
+        this._thumbs[meal.photo] = URL.createObjectURL(blob);
+        this._render();
+      } catch (_) {
+        /* thumbnail best effort */
+      }
+    }
   }
 
   _delete(photo) {
     if (!window.confirm("Delete this meal?")) return;
     const token = this._accessToken();
     const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    const body = { photo };
+    if (this._config.user) body.user = this._config.user;
     fetch("/api/wellness/meal/delete", {
       method: "POST",
       headers: { ...headers, "Content-Type": "application/json" },
-      body: JSON.stringify({ photo }),
+      body: JSON.stringify(body),
     }).then(() => this._load()).catch(() => this._load());
   }
 
@@ -97,7 +124,7 @@ class WellnessMealLogCard extends HTMLElement {
         return `
           <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--divider-color,#e0e0e0)">
             <div style="flex:0 0 48px;height:48px;border-radius:6px;overflow:hidden;background:#eee">
-              <img src="/api/wellness/photo?path=${encodeURIComponent(meal.photo)}"
+              <img src="${this._thumbs && this._thumbs[meal.photo] || ""}"
                    style="width:48px;height:48px;object-fit:cover"
                    onerror="this.style.display='none'">
             </div>

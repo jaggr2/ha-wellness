@@ -40,6 +40,23 @@ def _resolve_user(hass: HomeAssistant, request: web.Request, coordinator):
     return slug
 
 
+def _resolve_user_or_param(
+    hass: HomeAssistant, request: web.Request, coordinator
+) -> str:
+    """Resolve the participant: explicit 'user' query param wins, else auth user.
+
+    Used by read/list endpoints so a dashboard card can show another
+    participant's meals (e.g. Roger's) regardless of who is logged in.
+    """
+    requested = request.query.get("user")
+    if requested:
+        slug = (requested or "").strip()
+        if coordinator.get_participant(slug) is None:
+            raise web.HTTPBadRequest(text=f"Unknown wellness participant '{slug}'")
+        return slug
+    return _resolve_user(hass, request, coordinator)
+
+
 class WellnessPhotoView(HomeAssistantView):
     """Receive a meal photo and store it under the authenticated user's folder."""
 
@@ -82,7 +99,7 @@ class WellnessMealsView(HomeAssistantView):
         if coordinator is None:
             raise web.HTTPNotFound(text="Wellness is not configured")
 
-        slug = _resolve_user(hass, request, coordinator)
+        slug = _resolve_user_or_param(hass, request, coordinator)
         limit = int(request.query.get("limit", "20"))
         meals = await coordinator.async_list_meals(slug, limit=limit)
         return self.json({"ok": True, "user": slug, "meals": meals})
@@ -101,7 +118,7 @@ class WellnessPhotoGetView(HomeAssistantView):
         if coordinator is None:
             raise web.HTTPNotFound(text="Wellness is not configured")
 
-        slug = _resolve_user(hass, request, coordinator)
+        slug = _resolve_user_or_param(hass, request, coordinator)
         rel = request.query.get("path", "")
         rel = (rel or "").lstrip("/")
         if not rel or not rel.startswith("food-photos/"):
@@ -128,8 +145,14 @@ class WellnessMealDeleteView(HomeAssistantView):
         if coordinator is None:
             raise web.HTTPNotFound(text="Wellness is not configured")
 
-        slug = _resolve_user(hass, request, coordinator)
         data = await request.json()
+        requested = (data.get("user") or "").strip()
+        if requested:
+            if coordinator.get_participant(requested) is None:
+                raise web.HTTPBadRequest(text=f"Unknown wellness participant '{requested}'")
+            slug = requested
+        else:
+            slug = _resolve_user(hass, request, coordinator)
         photo = data.get("photo")
         if not photo:
             raise web.HTTPBadRequest(text="Missing 'photo'")
