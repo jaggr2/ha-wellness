@@ -23,21 +23,21 @@ views:
         entities:
           - entity: number.roger_body_weight
           - entity: number.roger_waist
-          - entity: button.roger_save_metrics
+          - entity: button.roger_save_body_metrics
+          - entity: sensor.roger_today_kcal
+          - entity: sensor.roger_last_meal
 
-      - type: custom:long-term-statistics
+      - type: statistics-graph
         title: Weight trend
         entities:
           - sensor.roger_body_weight_statistics
         chart_type: line
-        unit: kg
 
-      - type: custom:long-term-statistics
+      - type: statistics-graph
         title: Waist trend
         entities:
           - sensor.roger_waist_statistics
         chart_type: line
-        unit: cm
 
       # Recent meal photos live on the NAS mount; browse them with a
       # media-source card (media source must be configured) or show the
