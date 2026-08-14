@@ -7,9 +7,11 @@ via RestoreNumber.
 
 from __future__ import annotations
 
+from functools import partial
+
 from homeassistant.components.number import NumberEntity, NumberMode, RestoreNumber
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
@@ -76,13 +78,25 @@ class WellnessNumber(RestoreNumber):
             self._attr_native_step = WAIST_STEP
 
     async def async_added_to_hass(self) -> None:
-        """Restore the last value and push it to the coordinator."""
+        """Restore the last value, push it to the coordinator, and mirror updates."""
         await super().async_added_to_hass()
         last = await self.async_get_last_number_data()
         if last is not None and last.native_value is not None:
             value = float(last.native_value)
             self._attr_native_value = value
             self._coordinator.set_value(self._slug, self._kind, value)
+        self._coordinator.add_listener(self._on_coordinator_update)
+        self.async_on_remove(
+            partial(self._coordinator.remove_listener, self._on_coordinator_update)
+        )
+
+    @callback
+    def _on_coordinator_update(self) -> None:
+        """Reflect coordinator changes (e.g. a scale auto-assign) in the number."""
+        value = self._coordinator.get_value(self._slug, self._kind)
+        if value is not None and value != self._attr_native_value:
+            self._attr_native_value = value
+            self.async_write_ha_state()
 
     async def async_set_native_value(self, value: float) -> None:
         """Set the value (updates the coordinator, which mirrors to the sensor)."""

@@ -45,7 +45,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         )
 
     await coordinator.async_load_pending()
-    coordinator.async_setup_weight_sensors()
+    await coordinator.async_setup_weight_sensors()
     coordinator.async_setup_reminders()
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
