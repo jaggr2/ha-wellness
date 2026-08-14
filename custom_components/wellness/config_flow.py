@@ -10,8 +10,9 @@ import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult, OptionsFlow
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.selector import (
-    MultiSelectSelector,
-    MultiSelectSelectorConfig,
+    SelectSelector,
+    SelectSelectorConfig,
+    SelectSelectorMode,
     TextSelector,
     TextSelectorConfig,
     TextSelectorType,
@@ -92,8 +93,12 @@ class WellnessConfigFlow(ConfigFlow, domain=DOMAIN):
                 vol.Required(CONF_MOUNT_PATH, default=DEFAULT_MOUNT_PATH): TextSelector(
                     TextSelectorConfig(type=TextSelectorType.TEXT)
                 ),
-                vol.Required(CONF_PARTICIPANTS): MultiSelectSelector(
-                    MultiSelectSelectorConfig(options=_user_options(self.hass))
+                vol.Required(CONF_PARTICIPANTS): SelectSelector(
+                    SelectSelectorConfig(
+                        options=_user_options(self.hass),
+                        multiple=True,
+                        mode=SelectSelectorMode.DROPDOWN,
+                    )
                 ),
             }
         )
@@ -166,11 +171,19 @@ class WellnessOptionsFlow(OptionsFlow):
                     CONF_MOUNT_PATH,
                     default=data.get(CONF_MOUNT_PATH, DEFAULT_MOUNT_PATH),
                 ): TextSelector(TextSelectorConfig(type=TextSelectorType.TEXT)),
-                vol.Optional("add_users", default=[]): MultiSelectSelector(
-                    MultiSelectSelectorConfig(options=add_options)
+                vol.Optional("add_users", default=[]): SelectSelector(
+                    SelectSelectorConfig(
+                        options=add_options,
+                        multiple=True,
+                        mode=SelectSelectorMode.DROPDOWN,
+                    )
                 ),
-                vol.Optional("remove_participants", default=[]): MultiSelectSelector(
-                    MultiSelectSelectorConfig(options=remove_options)
+                vol.Optional("remove_participants", default=[]): SelectSelector(
+                    SelectSelectorConfig(
+                        options=remove_options,
+                        multiple=True,
+                        mode=SelectSelectorMode.DROPDOWN,
+                    )
                 ),
             }
         )
