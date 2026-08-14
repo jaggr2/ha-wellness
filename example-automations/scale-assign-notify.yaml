@@ -1,0 +1,44 @@
+alias: Wellness — pending scale reading
+description: Tell admins a shared-scale reading needs manual assignment.
+triggers:
+  - trigger: event
+    event_type: wellness_pending_weight
+actions:
+  - variables:
+      weight: "{{ trigger.event.data.weight_kg }}"
+      reading_id: "{{ trigger.event.data.reading_id }}"
+      candidates: "{{ trigger.event.data.candidates | join(', ') }}"
+  - action: notify.mobile_app_<admin_device_id>
+    data:
+      title: "⚖️ Weight {{ weight }} kg"
+      message: "Who measured? Candidates: {{ candidates or 'none' }}."
+      data:
+        url: /lovelace/wellness
+        actions:
+          - action: wellness_assign
+            title: "Assign now"
+            data:
+              reading_id: "{{ reading_id }}"
+          - action: wellness_dismiss
+            title: "Dismiss"
+            data:
+              reading_id: "{{ reading_id }}"
+  - wait_for_trigger:
+      - trigger: event
+        event_type: mobile_app_notification_action
+        event_data:
+          action: wellness_dismiss
+        id: dismiss
+    timeout: "00:15:00"
+    continue_on_timeout: true
+  - choose:
+      - conditions:
+          - condition: trigger
+            id: dismiss
+        sequence:
+          - action: wellness.dismiss_weight
+            data:
+              reading_id: "{{ wait.trigger.event.data.reading_id }}"
+  # "Assign now" just opens the dashboard where the wellness-assign card
+  # resolves the user; no further automation needed.
+mode: single

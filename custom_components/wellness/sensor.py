@@ -30,7 +30,40 @@ async def async_setup_entry(
         slug = participant["slug"]
         for kind in METRIC_DEFS:
             entities.append(WellnessMetricSensor(coordinator, entry, slug, kind))
+    entities.append(WellnessPendingSensor(coordinator, entry))
     async_add_entities(entities)
+
+
+class WellnessPendingSensor(SensorEntity):
+    """Count + details of unassigned smart-scale readings."""
+
+    def __init__(self, coordinator: WellnessCoordinator, entry: ConfigEntry) -> None:
+        super().__init__()
+        self._coordinator = coordinator
+        self._attr_unique_id = f"{entry.entry_id}_pending"
+        self._attr_name = "Pending weight assignments"
+        self._attr_has_entity_name = True
+        self._attr_entity_category = EntityCategory.DIAGNOSTIC
+        self._attr_icon = "mdi:scale-bathroom"
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        self._coordinator.add_listener(self._on_coordinator_update)
+        self.async_on_remove(
+            partial(self._coordinator.remove_listener, self._on_coordinator_update)
+        )
+
+    @callback
+    def _on_coordinator_update(self) -> None:
+        self.async_write_ha_state()
+
+    @property
+    def native_value(self) -> int:
+        return self._coordinator.pending_count
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return {"pending": self._coordinator.pending_list()}
 
 
 class WellnessMetricSensor(SensorEntity):

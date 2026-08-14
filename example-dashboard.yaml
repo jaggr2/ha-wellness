@@ -1,0 +1,48 @@
+# Wellness dashboard example
+# Copy the two cards to <config>/www/ and add this view to your dashboard
+# (Edit dashboard → raw configuration → merge the "wellness" view).
+#
+# Cards need to be loaded: add a "Custom card repository" resource:
+#   /local/wellness-capture-card/wellness-capture-card.js
+#   /local/wellness-assign-card/wellness-assign-card.js
+# Replace `roger` with your participant slugs where relevant.
+
+views:
+  - title: Wellness
+    path: wellness
+    icon: mdi:heart-pulse
+    cards:
+      - type: custom:wellness-capture-card
+        title: Meal photo
+
+      - type: custom:wellness-assign-card
+        title: Pending scale readings
+
+      - type: entities
+        title: Roger — body metrics
+        entities:
+          - entity: number.roger_body_weight
+          - entity: number.roger_waist
+          - entity: button.roger_save_metrics
+
+      - type: custom:long-term-statistics
+        title: Weight trend
+        entities:
+          - sensor.roger_body_weight
+        chart_type: line
+        unit: kg
+
+      - type: custom:long-term-statistics
+        title: Waist trend
+        entities:
+          - sensor.roger_waist
+        chart_type: line
+        unit: cm
+
+      # Recent meal photos (from the NAS mount via the media source / picture)
+      - type: picture-glance
+        title: Recent meal
+        camera_image: /api/wellness/photo
+        # A media-source card showing the food-photos folder works too:
+        # type: media-source
+        # media_content_id: media-source://media_source/local/food-photos/roger

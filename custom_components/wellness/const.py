@@ -14,6 +14,7 @@ PLATFORMS = ["number", "sensor", "button"]
 
 CONF_MOUNT_PATH = "mount_path"
 CONF_PARTICIPANTS = "participants"
+CONF_WEIGHT_SENSORS = "weight_sensors"
 
 PARTICIPANT_HA_USER_ID = "ha_user_id"
 PARTICIPANT_NAME = "name"
@@ -32,6 +33,24 @@ MAX_DELTA_KG = 5.0
 # Stale baselines (> 60 days) don't count as assignment candidates.
 MAX_AGE_DAYS = 60
 
+# Event names fired by the integration.
+EVENT_MEASUREMENT_REMINDER = "wellness_measurement_reminder"
+EVENT_PENDING_WEIGHT = "wellness_pending_weight"
+EVENT_WEIGHT_ASSIGNED = "wellness_weight_assigned"
+
+SERVICE_SAVE_BODY_METRICS = "save_body_metrics"
+SERVICE_ASSIGN_WEIGHT = "assign_weight"
+SERVICE_DISMISS_WEIGHT = "dismiss_weight"
+
+ATTR_USER = "user"
+ATTR_READING_ID = "reading_id"
+ATTR_WEIGHT = "weight_kg"
+ATTR_SENSOR_ID = "sensor_id"
+
+# Supported meal-photo content types -> file extension.
+PHOTO_EXTENSIONS = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
+PHOTO_MAX_BYTES = 10 * 1024 * 1024
+
 WEIGHT_KIND = "weight"
 WAIST_KIND = "waist"
 
@@ -47,8 +66,6 @@ WAIST_STEP = 0.5
 
 MANUFACTURER = "Home Assistant"
 MODEL = "Wellness tracker"
-
-SERVICE_SAVE_BODY_METRICS = "save_body_metrics"
 
 SAVE_BUTTON_DEVICE_CLASS = ButtonDeviceClass.UPDATE
 

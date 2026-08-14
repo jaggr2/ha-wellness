@@ -18,17 +18,31 @@
     "step": {
       "init": {
         "title": "Wellness options",
-        "description": "Add or remove participants. Per-participant names and measurement schedules are edited in a later phase.",
+        "description": "Add/remove participants, edit schedules, and pick the shared weight sensors (smart scale) that feed auto-assignment.",
         "data": {
           "mount_path": "Wellness data folder (mounted)",
           "add_users": "Add participants (HA users)",
-          "remove_participants": "Remove participants"
+          "remove_participants": "Remove participants",
+          "edit_slug": "Edit participant (name / schedule)",
+          "weight_sensors": "Shared weight sensors (smart scale)"
+        }
+      },
+      "edit": {
+        "title": "Edit participant",
+        "description": "Name and measurement schedule. Best practice: always measure on the same weekday and time.",
+        "data": {
+          "name": "Name",
+          "interval_days": "Measure every N days",
+          "day_of_week": "Weekday",
+          "time": "Time (HH:MM)"
         }
       }
     },
     "error": {
       "invalid_path": "The folder does not exist or is not writable. Check the NAS mount."
+    },
+    "abort": {
+      "participant_not_found": "The participant no longer exists."
     }
   }
 }
-

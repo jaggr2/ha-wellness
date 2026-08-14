@@ -62,3 +62,10 @@ def append_body_metrics(
                 return False
     append_jsonl(path, record)
     return True
+
+
+def write_photo(directory: str, file_path: str, data: bytes) -> None:
+    """Write photo bytes to disk, creating parent directories."""
+    os.makedirs(directory, exist_ok=True)
+    with open(file_path, "wb") as f:
+        f.write(data)

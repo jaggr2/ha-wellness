@@ -1,0 +1,28 @@
+alias: Wellness — measurement reminder
+description: Notify the participant when their measurement check-in is due (fired by the Wellness integration per schedule).
+triggers:
+  - trigger: event
+    event_type: wellness_measurement_reminder
+actions:
+  - variables:
+      user: "{{ trigger.event.data.user }}"
+      name: "{{ trigger.event.data.name }}"
+  - choose:
+      # Map each participant slug to their Companion device's notify entity.
+      - conditions: "{{ user == 'roger' }}"
+        sequence:
+          - action: notify.mobile_app_<roger_device_id>
+            data:
+              title: "📏 Weekly check-in, {{ name }}"
+              message: "Time to log your weight & waist."
+              data:
+                url: /lovelace/wellness
+      # - conditions: "{{ user == 'partner' }}"
+      #   sequence:
+      #     - action: notify.mobile_app_<partner_device_id>
+      #       data:
+      #         title: "📏 Weekly check-in, {{ name }}"
+      #         message: "Time to log your weight & waist."
+      #         data:
+      #           url: /lovelace/wellness
+mode: single

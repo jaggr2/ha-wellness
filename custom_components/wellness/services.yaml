@@ -9,3 +9,32 @@ save_body_metrics:
       example: roger
       selector:
         text:
+
+assign_weight:
+  name: Assign weight
+  description: Assign a pending smart-scale reading to a participant.
+  fields:
+    reading_id:
+      name: Reading
+      description: ID of the pending scale reading (see sensor.wellness_pending attributes).
+      required: true
+      selector:
+        text:
+    user:
+      name: User
+      description: Wellness participant slug to assign the reading to.
+      required: true
+      example: roger
+      selector:
+        text:
+
+dismiss_weight:
+  name: Dismiss weight
+  description: Discard a pending smart-scale reading (e.g. a guest stepped on the scale).
+  fields:
+    reading_id:
+      name: Reading
+      description: ID of the pending scale reading (see sensor.wellness_pending attributes).
+      required: true
+      selector:
+        text:

@@ -14,11 +14,16 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import config_validation as cv, service
 
 from .const import (
+    ATTR_READING_ID,
+    ATTR_USER,
     CONF_MOUNT_PATH,
     DOMAIN,
+    SERVICE_ASSIGN_WEIGHT,
+    SERVICE_DISMISS_WEIGHT,
     SERVICE_SAVE_BODY_METRICS,
 )
 from .coordinator import WellnessCoordinator
+from .http import async_register_views
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -38,14 +43,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             mount,
         )
 
+    await coordinator.async_load_pending()
+    coordinator.async_setup_weight_sensors()
+    coordinator.async_setup_reminders()
+
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     await _async_register_services(hass)
+    await async_register_views(hass)
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
+    coordinator: WellnessCoordinator = hass.data.get(DOMAIN, {}).get(entry.entry_id)
+    if coordinator is not None:
+        coordinator.shutdown()
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
         hass.data[DOMAIN].pop(entry.entry_id, None)
@@ -58,20 +71,49 @@ async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> Non
 
 
 async def _async_register_services(hass: HomeAssistant) -> None:
-    """Register the save_body_metrics service."""
+    """Register the Wellness services."""
+
+    def _get_coordinator() -> WellnessCoordinator:
+        entries = hass.data.get(DOMAIN, {})
+        if not entries:
+            raise HomeAssistantError("Wellness is not configured")
+        return next(iter(entries.values()))
 
     async def _save_body_metrics(call: ServiceCall) -> None:
-        slug = call.data["user"]
-        for coordinator in hass.data.get(DOMAIN, {}).values():
-            if coordinator.get_participant(slug):
-                await coordinator.save_body_metrics(slug)
-                return
-        raise HomeAssistantError(f"No wellness participant with slug '{slug}'")
+        coordinator = _get_coordinator()
+        slug = call.data[ATTR_USER]
+        if coordinator.get_participant(slug) is None:
+            raise HomeAssistantError(f"No wellness participant with slug '{slug}'")
+        await coordinator.save_body_metrics(slug)
+
+    async def _assign_weight(call: ServiceCall) -> None:
+        coordinator = _get_coordinator()
+        await coordinator.async_assign_weight(call.data[ATTR_READING_ID], call.data[ATTR_USER])
+
+    async def _dismiss_weight(call: ServiceCall) -> None:
+        coordinator = _get_coordinator()
+        await coordinator.async_dismiss_weight(call.data[ATTR_READING_ID])
 
     service.async_register_admin_service(
         hass,
         DOMAIN,
         SERVICE_SAVE_BODY_METRICS,
         _save_body_metrics,
-        schema=vol.Schema({vol.Required("user"): cv.string}),
+        schema=vol.Schema({vol.Required(ATTR_USER): cv.string}),
+    )
+    service.async_register_admin_service(
+        hass,
+        DOMAIN,
+        SERVICE_ASSIGN_WEIGHT,
+        _assign_weight,
+        schema=vol.Schema(
+            {vol.Required(ATTR_READING_ID): cv.string, vol.Required(ATTR_USER): cv.string}
+        ),
+    )
+    service.async_register_admin_service(
+        hass,
+        DOMAIN,
+        SERVICE_DISMISS_WEIGHT,
+        _dismiss_weight,
+        schema=vol.Schema({vol.Required(ATTR_READING_ID): cv.string}),
     )
