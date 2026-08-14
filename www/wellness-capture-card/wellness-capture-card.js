@@ -80,29 +80,42 @@ class WellnessCaptureCard extends HTMLElement {
     });
   }
 
-  async _upload(file) {
+  _upload(file) {
     this._status = "busy";
     this._render();
-    try {
-      const blob = await this._resize(file);
-      const form = new FormData();
-      form.append("file", blob, "meal.jpg");
-      const token = this._hass && this._hass.auth && this._hass.auth.access_token;
-      const headers = token ? { Authorization: `Bearer ${token}` } : {};
-      const resp = await fetch("/api/wellness/photo", { method: "POST", headers, body: form });
-      if (!resp.ok) {
-        let msg = `HTTP ${resp.status}`;
-        try { const j = await resp.json(); msg = j.message || j.error || msg; } catch (_) {}
-        throw new Error(msg);
-      }
-      const url = URL.createObjectURL(blob);
-      this._thumb = url;
-      this._status = "ok";
-      this._error = "";
-    } catch (err) {
+    this._doUpload(file).catch((err) => {
       this._status = "err";
       this._error = err && err.message ? err.message : String(err);
+      this._render();
+    });
+  }
+
+  _accessToken() {
+    // The Companion app / HA frontend keeps the token in auth.data;
+    // fall back to the legacy auth.access_token for older frontends.
+    const auth = this._hass && this._hass.auth;
+    if (!auth) return null;
+    if (auth.data && auth.data.access_token) return auth.data.access_token;
+    if (auth.access_token) return auth.access_token;
+    return null;
+  }
+
+  async _doUpload(file) {
+    const blob = await this._resize(file);
+    const form = new FormData();
+    form.append("file", blob, "meal.jpg");
+    const token = this._accessToken();
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    const resp = await fetch("/api/wellness/photo", { method: "POST", headers, body: form });
+    if (!resp.ok) {
+      let msg = `HTTP ${resp.status}`;
+      try { const j = await resp.json(); msg = j.message || j.error || msg; } catch (_) {}
+      throw new Error(msg);
     }
+    const url = URL.createObjectURL(blob);
+    this._thumb = url;
+    this._status = "ok";
+    this._error = "";
     this._render();
   }
 }
