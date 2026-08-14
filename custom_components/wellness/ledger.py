@@ -92,3 +92,62 @@ def write_photo(directory: str, file_path: str, data: bytes) -> None:
     os.makedirs(directory, exist_ok=True)
     with open(file_path, "wb") as f:
         f.write(data)
+
+
+def rewrite_jsonl(path: str, keep: Any) -> int:
+    """Rewrite a JSONL file keeping only lines where keep(record) is True.
+
+    Returns the number of records removed. Missing files are treated as empty.
+    """
+    records = read_lines(path)
+    kept = [r for r in records if keep(r)]
+    removed = len(records) - len(kept)
+    if removed:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            for record in kept:
+                f.write(json.dumps(record, ensure_ascii=False) + "\n")
+    return removed
+
+
+def delete_photo(abs_path: str) -> bool:
+    """Delete a photo file if it exists; returns True when removed."""
+    try:
+        os.remove(abs_path)
+        return True
+    except FileNotFoundError:
+        return False
+
+
+def eating_regularity(
+    meal_times_epoch: list[float],
+    now: float,
+    today_start_epoch: float,
+    min_gap_minutes: float = 120.0,
+) -> dict[str, Any]:
+    """Compute eating-frequency stats from meal timestamps (pure, testable).
+
+    ``meal_times_epoch`` — ascending epoch timestamps of logged meals.
+    Returns meal count today, min/avg/last gap (minutes) and a ``too_frequent``
+    flag when consecutive meals are closer than ``min_gap_minutes``.
+    """
+    times = sorted(meal_times_epoch)
+    today = [t for t in times if t >= today_start_epoch and t <= now + 60]
+
+    gaps_s = [times[i] - times[i - 1] for i in range(1, len(times))]
+    positive_gaps_min = [g / 60 for g in gaps_s if g > 0]
+    min_gap_min = round(min(positive_gaps_min), 1) if positive_gaps_min else None
+    avg_gap_min = (
+        round(sum(positive_gaps_min) / len(positive_gaps_min), 1)
+        if positive_gaps_min
+        else None
+    )
+    last_gap_min = round(gaps_s[-1] / 60, 1) if gaps_s else None
+
+    return {
+        "meals_today": len(today),
+        "min_gap_min": min_gap_min,
+        "avg_gap_min": avg_gap_min,
+        "last_gap_min": last_gap_min,
+        "too_frequent": min_gap_min is not None and min_gap_min < min_gap_minutes,
+    }

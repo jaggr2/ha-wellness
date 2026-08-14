@@ -14,12 +14,14 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import config_validation as cv, service
 
 from .const import (
+    ATTR_PHOTO,
     ATTR_READING_ID,
     ATTR_USER,
     CONF_MOUNT_PATH,
     DOMAIN,
     SERVICE_ANALYZE_MEALS,
     SERVICE_ASSIGN_WEIGHT,
+    SERVICE_DELETE_MEAL,
     SERVICE_DISMISS_WEIGHT,
     SERVICE_SAVE_BODY_METRICS,
 )
@@ -47,6 +49,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await coordinator.async_load_pending()
     await coordinator.async_setup_weight_sensors()
     coordinator.async_setup_reminders()
+    coordinator.async_setup_daily_refresh()
     await coordinator.async_restore_meal_aggregates()
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
@@ -103,6 +106,13 @@ async def _async_register_services(hass: HomeAssistant) -> None:
             raise HomeAssistantError(f"No wellness participant with slug '{slug}'")
         await coordinator.analyze_meals(slug, limit=int(call.data.get("limit", 5)))
 
+    async def _delete_meal(call: ServiceCall) -> None:
+        coordinator = _get_coordinator()
+        slug = call.data[ATTR_USER]
+        if coordinator.get_participant(slug) is None:
+            raise HomeAssistantError(f"No wellness participant with slug '{slug}'")
+        await coordinator.async_delete_meal(slug, call.data[ATTR_PHOTO])
+
     service.async_register_admin_service(
         hass,
         DOMAIN,
@@ -135,6 +145,18 @@ async def _async_register_services(hass: HomeAssistant) -> None:
             {
                 vol.Required(ATTR_USER): cv.string,
                 vol.Optional("limit", default=5): cv.positive_int,
+            }
+        ),
+    )
+    service.async_register_admin_service(
+        hass,
+        DOMAIN,
+        SERVICE_DELETE_MEAL,
+        _delete_meal,
+        schema=vol.Schema(
+            {
+                vol.Required(ATTR_USER): cv.string,
+                vol.Required(ATTR_PHOTO): cv.string,
             }
         ),
     )

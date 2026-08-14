@@ -5,6 +5,7 @@
 # Cards need to be loaded: add a "Custom card repository" resource:
 #   /local/wellness-capture-card/wellness-capture-card.js
 #   /local/wellness-assign-card/wellness-assign-card.js
+#   /local/wellness-meal-log-card/wellness-meal-log-card.js
 # Replace `roger` with your participant slugs where relevant.
 
 views:
@@ -18,15 +19,24 @@ views:
       - type: custom:wellness-assign-card
         title: Pending scale readings
 
+      - type: custom:wellness-meal-log-card
+        title: Recent meals
+
+      - type: entities
+        title: Roger — calories
+        entities:
+          - entity: sensor.roger_today_kcal
+          - entity: sensor.roger_kcal_remaining
+          - entity: sensor.roger_meal_analysis_status
+
       - type: entities
         title: Roger — body metrics
         entities:
           - entity: number.roger_body_weight
           - entity: number.roger_waist
           - entity: button.roger_save_body_metrics
-          - entity: sensor.roger_today_kcal
+          - entity: sensor.roger_eating_regularity
           - entity: sensor.roger_last_meal
-          - entity: sensor.roger_meal_analysis_status
 
       - type: statistics-graph
         title: Weight trend

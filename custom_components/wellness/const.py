@@ -25,16 +25,22 @@ PARTICIPANT_SLUG = "slug"
 PARTICIPANT_INTERVAL_DAYS = "interval_days"
 PARTICIPANT_DAY_OF_WEEK = "day_of_week"
 PARTICIPANT_TIME = "time"
+PARTICIPANT_DAILY_KCAL_TARGET = "daily_kcal_target"
 
 DEFAULT_MOUNT_PATH = "/share/wellness"
 DEFAULT_INTERVAL_DAYS = 7
 DEFAULT_DAY_OF_WEEK = 6  # Sunday (ISO weekday, Monday = 0)
 DEFAULT_TIME = "20:00"
+DEFAULT_DAILY_KCAL_TARGET = 2000
 
 # Smart-scale assignment (Phase 2): assume a person's weight moved <= 5 kg.
 MAX_DELTA_KG = 5.0
 # Stale baselines (> 60 days) don't count as assignment candidates.
 MAX_AGE_DAYS = 60
+
+# Eating-regularity heuristic: a gap shorter than this (minutes) between two
+# meals counts as "too frequent" (snacking).
+MIN_MEAL_GAP_MIN = 120
 
 # Event names fired by the integration.
 EVENT_MEASUREMENT_REMINDER = "wellness_measurement_reminder"
@@ -42,16 +48,19 @@ EVENT_PENDING_WEIGHT = "wellness_pending_weight"
 EVENT_WEIGHT_ASSIGNED = "wellness_weight_assigned"
 EVENT_MEAL_LOGGED = "wellness_meal_logged"
 EVENT_MEAL_ANALYZED = "wellness_meal_analyzed"
+EVENT_MEAL_DELETED = "wellness_meal_deleted"
 
 SERVICE_SAVE_BODY_METRICS = "save_body_metrics"
 SERVICE_ASSIGN_WEIGHT = "assign_weight"
 SERVICE_DISMISS_WEIGHT = "dismiss_weight"
 SERVICE_ANALYZE_MEALS = "analyze_meals"
+SERVICE_DELETE_MEAL = "delete_meal"
 
 ATTR_USER = "user"
 ATTR_READING_ID = "reading_id"
 ATTR_WEIGHT = "weight_kg"
 ATTR_SENSOR_ID = "sensor_id"
+ATTR_PHOTO = "photo"
 
 # Supported meal-photo content types -> file extension.
 PHOTO_EXTENSIONS = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}

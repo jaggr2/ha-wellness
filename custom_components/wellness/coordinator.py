@@ -22,13 +22,18 @@ from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.device_registry import DeviceInfo
-from homeassistant.helpers.event import async_call_later, async_track_state_change_event
+from homeassistant.helpers.event import (
+    async_call_later,
+    async_track_state_change_event,
+    async_track_time_interval,
+)
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
 from .analyzer import analyze_photo
 from .assignment import find_assignee, should_ignore, to_kg
 from .const import (
+    ATTR_PHOTO,
     ATTR_READING_ID,
     ATTR_SENSOR_ID,
     ATTR_USER,
@@ -38,16 +43,19 @@ from .const import (
     CONF_MOUNT_PATH,
     CONF_PARTICIPANTS,
     CONF_WEIGHT_SENSORS,
+    DEFAULT_DAILY_KCAL_TARGET,
     DEFAULT_GROQ_MODEL,
     DEFAULT_MOUNT_PATH,
     DOMAIN,
     EVENT_MEASUREMENT_REMINDER,
     EVENT_MEAL_ANALYZED,
+    EVENT_MEAL_DELETED,
     EVENT_MEAL_LOGGED,
     EVENT_PENDING_WEIGHT,
     EVENT_WEIGHT_ASSIGNED,
     MANUFACTURER,
     MODEL,
+    PARTICIPANT_DAILY_KCAL_TARGET,
     PARTICIPANT_DAY_OF_WEEK,
     PARTICIPANT_HA_USER_ID,
     PARTICIPANT_INTERVAL_DAYS,
@@ -60,9 +68,12 @@ from .const import (
 from .ledger import (
     append_body_metrics,
     append_jsonl,
+    delete_photo,
+    eating_regularity as _ledger_regularity,
     read_last_line,
     read_lines,
     read_photo,
+    rewrite_jsonl,
     write_photo,
 )
 
@@ -100,6 +111,7 @@ class WellnessCoordinator:
         # subscription / timer handles
         self._weight_unsub: Callable[[], None] | None = None
         self._reminder_unsubs: list[Callable[[], None]] = []
+        self._daily_refresh_unsub: Callable[[], None] | None = None
         # per-user meal analysis aggregates
         self._today_kcal: dict[str, float] = {}
         self._last_meal: dict[str, str] = {}
@@ -505,11 +517,134 @@ class WellnessCoordinator:
         self._notify_listeners()
 
     # ------------------------------------------------------------------
+    # Meal list / delete
+    # ------------------------------------------------------------------
+    def daily_kcal_target(self, slug: str) -> float:
+        participant = self.get_participant(slug)
+        return float(
+            (participant or {}).get(PARTICIPANT_DAILY_KCAL_TARGET, DEFAULT_DAILY_KCAL_TARGET)
+        )
+
+    def kcal_remaining(self, slug: str) -> float:
+        """Remaining kcal for the day (target minus consumed), never negative."""
+        return max(0.0, self.daily_kcal_target(slug) - self.today_kcal(slug))
+
+    async def async_list_meals(self, slug: str, limit: int = 20) -> list[dict[str, Any]]:
+        """Return recent meals for a participant, newest first, merged with analysis."""
+        meals = await self.hass.async_add_executor_job(
+            read_lines, str(self.ledger_path(slug, "meal-log"))
+        )
+        analyses = await self.hass.async_add_executor_job(
+            read_lines, str(self.ledger_path(slug, "meal-analysis"))
+        )
+        analysis_by_photo = {a.get("photo"): a for a in analyses if a.get("photo")}
+        rows = []
+        for meal in meals:
+            photo = meal.get("photo")
+            if not photo:
+                continue
+            row = {**meal, ATTR_PHOTO: photo}
+            analysis = analysis_by_photo.get(photo)
+            if analysis:
+                row["food"] = [
+                    f.get("item", "") for f in analysis.get("food", []) if f.get("item")
+                ]
+                row["estimated_kcal_total"] = analysis.get("estimated_kcal_total", 0)
+            rows.append(row)
+        rows.sort(key=lambda r: r.get("ts", ""), reverse=True)
+        return rows[:limit]
+
+    async def async_delete_meal(self, slug: str, photo: str) -> bool:
+        """Delete a meal (photo + meal-log + meal-analysis entries). Returns True if removed."""
+        photo = (photo or "").strip()
+        if not photo:
+            raise HomeAssistantError("Missing 'photo'")
+
+        def _remove() -> tuple[int, int]:
+            log_removed = rewrite_jsonl(
+                str(self.ledger_path(slug, "meal-log")),
+                lambda r: r.get("photo") != photo,
+            )
+            analysis_removed = rewrite_jsonl(
+                str(self.ledger_path(slug, "meal-analysis")),
+                lambda r: r.get("photo") != photo,
+            )
+            return log_removed, analysis_removed
+
+        log_removed, analysis_removed = await self.hass.async_add_executor_job(_remove)
+        if log_removed == 0:
+            return False
+
+        # Remove the photo file (best effort; already gone or missing is fine).
+        abs_photo = self.mount_path / photo
+        await self.hass.async_add_executor_job(delete_photo, str(abs_photo))
+
+        # Drop any pending auto-analysis status for this photo.
+        current = self._analysis_status.get(slug)
+        if current and current.get(ATTR_PHOTO) == photo:
+            self._analysis_status.pop(slug, None)
+
+        await self._async_refresh_meal_aggregates(slug)
+        self.hass.bus.async_fire(
+            EVENT_MEAL_DELETED, {ATTR_USER: slug, ATTR_PHOTO: photo}
+        )
+        self._notify_listeners()
+        return True
+
+    # ------------------------------------------------------------------
+    # Eating regularity
+    # ------------------------------------------------------------------
+    def _meal_times(self, slug: str) -> list[float]:
+        """UTC epoch timestamps of logged meals for a participant, ascending."""
+        records = read_lines(str(self.ledger_path(slug, "meal-log")))
+        times: list[float] = []
+        for record in records:
+            ts_str = record.get("ts")
+            if not ts_str:
+                continue
+            ts_dt = dt_util.parse_datetime(ts_str)
+            if ts_dt is not None:
+                times.append(ts_dt.timestamp())
+        return sorted(times)
+
+    def eating_regularity(self, slug: str) -> dict[str, Any]:
+        """Stats about eating frequency for a participant."""
+        result = _ledger_regularity(
+            self._meal_times(slug),
+            now=time.time(),
+            today_start_epoch=dt_util.start_of_local_day(dt_util.now()).timestamp(),
+        )
+        # Add today's meal times as local HH:MM for the UI.
+        today_start = dt_util.start_of_local_day(dt_util.now()).timestamp()
+        today_times = [
+            t
+            for t in self._meal_times(slug)
+            if t >= today_start and t <= time.time() + 60
+        ]
+        result["meal_times_today"] = [
+            dt_util.as_local(dt_util.utc_from_timestamp(t)).strftime("%H:%M")
+            for t in today_times
+        ]
+        return result
+
+    # ------------------------------------------------------------------
     # Measurement reminders
     # ------------------------------------------------------------------
     def async_setup_reminders(self) -> None:
         for participant in self.participants:
             self._schedule_reminder(participant)
+
+    def async_setup_daily_refresh(self) -> None:
+        """Periodically re-notify so 'today' counters roll over at midnight."""
+        self._daily_refresh_unsub = async_track_time_interval(
+            self.hass,
+            self._async_daily_refresh,
+            timedelta(minutes=10),
+        )
+
+    @callback
+    def _async_daily_refresh(self, _now) -> None:
+        self._notify_listeners()
 
     def _schedule_reminder(self, participant: dict[str, Any]) -> None:
         slug = participant[PARTICIPANT_SLUG]
@@ -547,3 +682,6 @@ class WellnessCoordinator:
         for unsub in self._reminder_unsubs:
             unsub()
         self._reminder_unsubs.clear()
+        if self._daily_refresh_unsub is not None:
+            self._daily_refresh_unsub()
+            self._daily_refresh_unsub = None

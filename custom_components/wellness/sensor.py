@@ -36,6 +36,8 @@ async def async_setup_entry(
         entities.append(WellnessKcalSensor(coordinator, entry, slug))
         entities.append(WellnessLastMealSensor(coordinator, entry, slug))
         entities.append(WellnessMealStatusSensor(coordinator, entry, slug))
+        entities.append(WellnessKcalRemainingSensor(coordinator, entry, slug))
+        entities.append(WellnessEatingRegularitySensor(coordinator, entry, slug))
     async_add_entities(entities)
 
 
@@ -131,6 +133,80 @@ class WellnessMealStatusSensor(SensorEntity):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         return dict(self._coordinator.meal_analysis_status(self._slug))
+
+
+class WellnessKcalRemainingSensor(SensorEntity):
+    """Remaining kcal for the day vs the participant's daily target."""
+
+    def __init__(self, coordinator: WellnessCoordinator, entry: ConfigEntry, slug: str) -> None:
+        super().__init__()
+        self._coordinator = coordinator
+        self._slug = slug
+        self._attr_device_info = coordinator.device_info(slug)
+        self._attr_unique_id = f"{entry.entry_id}_{slug}_kcal_remaining"
+        self._attr_name = "Kcal remaining"
+        self._attr_has_entity_name = True
+        self._attr_native_unit_of_measurement = "kcal"
+        self._attr_icon = "mdi:chart-donut"
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        self._coordinator.add_listener(self._on_coordinator_update)
+        self.async_on_remove(
+            partial(self._coordinator.remove_listener, self._on_coordinator_update)
+        )
+
+    @callback
+    def _on_coordinator_update(self) -> None:
+        self.async_write_ha_state()
+
+    @property
+    def native_value(self) -> float:
+        return self._coordinator.kcal_remaining(self._slug)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        target = self._coordinator.daily_kcal_target(self._slug)
+        consumed = self._coordinator.today_kcal(self._slug)
+        percent = round(consumed / target * 100, 1) if target else 0.0
+        return {
+            "target_kcal": target,
+            "consumed_kcal": round(consumed, 1),
+            "percent_consumed": percent,
+        }
+
+
+class WellnessEatingRegularitySensor(SensorEntity):
+    """How often the participant eats today (count + gaps + too-frequent flag)."""
+
+    def __init__(self, coordinator: WellnessCoordinator, entry: ConfigEntry, slug: str) -> None:
+        super().__init__()
+        self._coordinator = coordinator
+        self._slug = slug
+        self._attr_device_info = coordinator.device_info(slug)
+        self._attr_unique_id = f"{entry.entry_id}_{slug}_eating_regularity"
+        self._attr_name = "Meals today"
+        self._attr_has_entity_name = True
+        self._attr_icon = "mdi:silverware-fork-knife"
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        self._coordinator.add_listener(self._on_coordinator_update)
+        self.async_on_remove(
+            partial(self._coordinator.remove_listener, self._on_coordinator_update)
+        )
+
+    @callback
+    def _on_coordinator_update(self) -> None:
+        self.async_write_ha_state()
+
+    @property
+    def native_value(self) -> int:
+        return self._coordinator.eating_regularity(self._slug)["meals_today"]
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return self._coordinator.eating_regularity(self._slug)
 
 
 class WellnessPendingSensor(SensorEntity):

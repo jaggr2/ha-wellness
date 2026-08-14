@@ -30,12 +30,14 @@ from .const import (
     CONF_MOUNT_PATH,
     CONF_PARTICIPANTS,
     CONF_WEIGHT_SENSORS,
+    DEFAULT_DAILY_KCAL_TARGET,
     DEFAULT_DAY_OF_WEEK,
     DEFAULT_GROQ_MODEL,
     DEFAULT_INTERVAL_DAYS,
     DEFAULT_MOUNT_PATH,
     DEFAULT_TIME,
     DOMAIN,
+    PARTICIPANT_DAILY_KCAL_TARGET,
     PARTICIPANT_DAY_OF_WEEK,
     PARTICIPANT_HA_USER_ID,
     PARTICIPANT_INTERVAL_DAYS,
@@ -130,6 +132,7 @@ def _participant_from_user(user_id: str, name: str, existing_slugs: set[str]) ->
         PARTICIPANT_INTERVAL_DAYS: DEFAULT_INTERVAL_DAYS,
         PARTICIPANT_DAY_OF_WEEK: DEFAULT_DAY_OF_WEEK,
         PARTICIPANT_TIME: DEFAULT_TIME,
+        PARTICIPANT_DAILY_KCAL_TARGET: DEFAULT_DAILY_KCAL_TARGET,
     }
 
 
@@ -261,6 +264,9 @@ class WellnessOptionsFlow(OptionsFlow):
                 **user_input,
                 PARTICIPANT_DAY_OF_WEEK: int(user_input[PARTICIPANT_DAY_OF_WEEK]),
                 PARTICIPANT_INTERVAL_DAYS: int(user_input[PARTICIPANT_INTERVAL_DAYS]),
+                PARTICIPANT_DAILY_KCAL_TARGET: float(
+                    user_input[PARTICIPANT_DAILY_KCAL_TARGET]
+                ),
             }
             participants = [
                 {**p, **normalized} if p[PARTICIPANT_SLUG] == slug else p
@@ -307,6 +313,22 @@ class WellnessOptionsFlow(OptionsFlow):
                     PARTICIPANT_TIME,
                     default=participant.get(PARTICIPANT_TIME, DEFAULT_TIME),
                 ): TextSelector(TextSelectorConfig(type=TextSelectorType.TEXT)),
+                vol.Required(
+                    PARTICIPANT_DAILY_KCAL_TARGET,
+                    default=float(
+                        participant.get(
+                            PARTICIPANT_DAILY_KCAL_TARGET, DEFAULT_DAILY_KCAL_TARGET
+                        )
+                    ),
+                ): NumberSelector(
+                    NumberSelectorConfig(
+                        min=500,
+                        max=6000,
+                        step=50,
+                        mode=NumberSelectorMode.BOX,
+                        unit_of_measurement="kcal/day",
+                    )
+                ),
             }
         )
         return self.async_show_form(step_id="edit", data_schema=schema)

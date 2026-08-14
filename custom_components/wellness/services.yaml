@@ -59,3 +59,21 @@ analyze_meals:
           min: 1
           max: 50
           mode: box
+
+delete_meal:
+  name: Delete meal
+  description: Delete a logged meal (photo + meal-log + meal-analysis entries).
+  fields:
+    user:
+      name: User
+      description: Wellness participant slug.
+      required: true
+      example: roger
+      selector:
+        text:
+    photo:
+      name: Photo
+      description: The photo path from the meal-log entry (e.g. food-photos/roger/2026/08/14/…jpg).
+      required: true
+      selector:
+        text:

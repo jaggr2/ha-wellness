@@ -31,12 +31,13 @@
       },
       "edit": {
         "title": "Edit participant",
-        "description": "Name and measurement schedule. Best practice: always measure on the same weekday and time.",
+        "description": "Name, measurement schedule and daily calorie goal.",
         "data": {
           "name": "Name",
           "interval_days": "Measure every N days",
           "day_of_week": "Weekday",
-          "time": "Time (HH:MM)"
+          "time": "Time (HH:MM)",
+          "daily_kcal_target": "Daily kcal target"
         }
       }
     },
