@@ -10,6 +10,9 @@ Multi-user wellness tracking for Home Assistant.
 - **Smart-scale assignment** — connect your shared weight sensor(s) in the options. Readings are auto-assigned to a participant when unambiguous (last weight within **±5 kg** and ≤ **60 days** old); otherwise a pending reading is created, the `wellness_pending_weight` event fires (for admin notification), and `sensor.wellness_pending` + the **assign card** let you resolve it explicitly. Deduplicated against repeated pushes. Sensor values are normalized to **kg** (g / lb / oz / st supported).
 - **Reminders** — per-participant schedule (weekday + time + every-N-days, default Sunday 20:00 weekly); the integration fires `wellness_measurement_reminder` for you to notify via your own automation.
 - **VLM meal analysis (Groq)** — new meal photos are **analyzed automatically** (no manual step): after a photo is uploaded, the integration runs Groq vision (`qwen/qwen3.6-27b`) on it and stores structured analysis (`food`, `beverages`, amounts, `estimated_kcal_total` + per item) in `meal-analysis-<user>.jsonl`. A per-user **Meal analysis status** sensor (`analyzing`/`done`/`error`, with `kcal`/`food`/`photo` attributes) powers the capture card's "Analyzing… → result" feedback, and the **Today kcal** / **Last meal** sensors update. You can also run `wellness.analyze_meals` manually.
+- **Meal log & delete** — the **meal log card** lists recent meals (photo, time, detected food, kcal) from the authenticated `GET /api/wellness/meals` endpoint and lets you delete wrong entries (`POST /api/wellness/meal/delete` or the `wellness.delete_meal` service), removing the photo, meal-log and meal-analysis rows.
+- **Daily kcal target & progress** — each participant has a **daily kcal target** (set in Configure → edit participant). The **Kcal remaining** sensor shows what's left today (with `target_kcal`/`consumed_kcal`/`percent_consumed` attributes) so you always know where you stand.
+- **Eating regularity** — the **Meals today** sensor tracks how often you've eaten (count, today's meal times, min/avg/last gap in minutes) and flags `too_frequent` when consecutive meals are closer than 2 hours (snacking).
 - **Multi-user** — every participant is a Home Assistant account; each gets their own device, entities and ledgers.
 
 ## Installation
@@ -23,6 +26,7 @@ Multi-user wellness tracking for Home Assistant.
 Copy the `www/` folders to `<config>/www/`, then register as Lovelace resources:
 - `/local/wellness-capture-card/wellness-capture-card.js`
 - `/local/wellness-assign-card/wellness-assign-card.js`
+- `/local/wellness-meal-log-card/wellness-meal-log-card.js`
 
 ### Manual
 ```bash

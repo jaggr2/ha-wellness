@@ -1,7 +1,7 @@
 # Wellness — Project Status & Handoff
 
 > Last updated: 2026-08-14 (evening session) · Author: Athena/Winston session with Roger
-> Repo: `jaggr2/ha-wellness` (public, HACS-ready) · Latest release: **v0.6.2**
+> Repo: `jaggr2/ha-wellness` (public, HACS-ready) · Latest release: **v0.7.0**
 
 This file captures the current state, decisions, what has been built, and what
 remains — so work can be resumed (or handed to another agent) without losing
@@ -92,6 +92,9 @@ A multi-user health & meal tracker for Roger's home:
 - `wellness.analyze_meals {user, limit}` — reads unanalyzed meal-log photos, sends to Groq vision, stores structured analysis in `meal-analysis-<user>.jsonl`, updates today-kcal/last-meal sensors, fires `wellness_meal_analyzed`.
 - **Auto-analysis (v0.6.0+)** — a meal photo upload automatically triggers Groq analysis (`limit=1`) ~2s after the log; per-user **Meal analysis status** sensor (`sensor.<user>_meal_analysis_status`, `analyzing`/`done`/`error` with `photo`/`kcal`/`food`/`error` attributes); the capture card shows "Photo saved → Analyzing… → Analyzed · N kcal (+ food list)" by matching the status sensor's `photo` attribute to the upload response.
 - Aggregates (today-kcal / last-meal) are recomputed from the ledgers at startup (`async_restore_meal_aggregates`).
+- **Meal log & delete (v0.7.0)** — `GET /api/wellness/meals` (recent meals, merged with analysis), `GET /api/wellness/photo?path=…` (serves stored photos), `POST /api/wellness/meal/delete` (+ `wellness.delete_meal` service). All authenticated, participant resolved server-side. A **meal log card** (`wellness-meal-log-card.js`) lists meals with photo/time/food/kcal and a Delete button.
+- **Daily kcal target (v0.7.0)** — per-participant `daily_kcal_target` in the options flow (default 2000). `sensor.<user>_kcal_remaining` shows what's left today, with `target_kcal`/`consumed_kcal`/`percent_consumed` attributes.
+- **Eating regularity (v0.7.0)** — `sensor.<user>_meals_today` reports meals logged today plus `meal_times_today`, `min_gap_min`, `avg_gap_min`, `last_gap_min` and a `too_frequent` flag when consecutive meals are < 120 min apart (snacking heuristic).
 
 **Events**: `wellness_measurement_reminder` · `wellness_pending_weight` · `wellness_weight_assigned` · `wellness_meal_logged` · `wellness_meal_analyzed`
 
@@ -132,6 +135,7 @@ A multi-user health & meal tracker for Roger's home:
 - **Auto meal analysis live**: a real photo uploaded from the Companion app (banana quark) was stored and auto-analyzed (120 kcal); status flow verified `analyzing → done` with `kcal`+`food` attributes; capture card verified rendering "Analyzed · N kcal".
 
 ### Version history (bug fixes worth knowing)
+- **0.7.0** — meal log list + delete (HTTP endpoints + card + service), per-participant daily kcal target + Kcal remaining sensor, eating-regularity (Meals today) sensor with too-frequent flag.
 - **0.6.0–0.6.2** — auto-analysis on meal upload (uses `asyncio.sleep`, not `hass.async_sleep` which doesn't exist), per-user `Meal analysis status` sensor, capture-card progress/result feedback, aggregates restored from ledger at startup. Card auth token read from `hass.auth.data.access_token`.
 - **0.5.0** — Groq model migration (`qwen/qwen3.6-27b`, llama-vision decommissioned), `<think>`-block stripping in the analyzer, `max_tokens` raised (qwen reasons verbosely).
 - **0.4.0–0.4.2** — smart-scale hardening: `async_setup_weight_sensors()` was never awaited (subscription never registered); sensor values are now normalized to **kg** (g/lb/oz/st); the `number.*_body_weight` entity now mirrors coordinator changes so a scale auto-assign is reflected immediately.
@@ -150,8 +154,9 @@ A multi-user health & meal tracker for Roger's home:
 
 1. **Verify the scale feed in real life** — step on the shared scale once; Samsung Health → S24+ → `sensor.s24plus_weight` should auto-assign to `roger` (last weight 118.0 kg). Trigger a deliberately ambiguous reading only if you want to see the "ask" flow again.
 2. **Add derog_ha's Companion app** (when ready) so their reminder + pending-scale notifications work; fill `notify.mobile_app_<derog_ha_device>` in the automations (both example automations already have a commented placeholder).
-3. **Optional hardening** — NFS fallback if the HA OS SMB mount fails to remount after reboots; consider versioning the HA `/config` in git.
-4. HACS install path: the cards' `www/` resources can also be installed via HACS frontend repo so they auto-update; for now they're manually synced to `/config/www/`.
+3. **Set daily kcal targets** in Configure → edit participant (both participants currently default to 2000; derog_ha's is set but their data will fill in once they log meals).
+4. **Optional hardening** — NFS fallback if the HA OS SMB mount fails to remount after reboots; consider versioning the HA `/config` in git.
+5. HACS install path: the cards' `www/` resources can also be installed via HACS frontend repo so they auto-update; for now they're manually synced to `/config/www/`.
 
 ---
 
