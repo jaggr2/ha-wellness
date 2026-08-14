@@ -1,0 +1,11 @@
+save_body_metrics:
+  name: Save body metrics
+  description: Append the participant's current weight/waist to their body-metrics JSONL ledger (deduplicated against the last row).
+  fields:
+    user:
+      name: User
+      description: Wellness participant slug (e.g. roger).
+      required: true
+      example: roger
+      selector:
+        text:

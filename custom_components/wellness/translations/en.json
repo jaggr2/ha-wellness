@@ -1,0 +1,33 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Wellness",
+        "description": "Point to the mounted wellness data folder and choose which Home Assistant users participate. Each participant gets their own weight/waist entities and JSONL ledgers.",
+        "data": {
+          "mount_path": "Wellness data folder (mounted)",
+          "participants": "Participants (HA users)"
+        }
+      }
+    },
+    "error": {
+      "invalid_path": "The folder does not exist or is not writable. Check the NAS mount."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Wellness options",
+        "description": "Add or remove participants. Per-participant names and measurement schedules are edited in a later phase.",
+        "data": {
+          "mount_path": "Wellness data folder (mounted)",
+          "add_users": "Add participants (HA users)",
+          "remove_participants": "Remove participants"
+        }
+      }
+    },
+    "error": {
+      "invalid_path": "The folder does not exist or is not writable. Check the NAS mount."
+    }
+  }
+}
