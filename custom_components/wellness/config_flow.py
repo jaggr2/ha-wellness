@@ -40,13 +40,24 @@ def _path_writable(path: str) -> bool:
     return os.path.isdir(path) and os.access(path, os.W_OK)
 
 
-def _user_options(hass: HomeAssistant) -> list[dict[str, str]]:
-    users = hass.auth.async_get_users()
+async def _active_users(hass: HomeAssistant) -> list[Any]:
+    """Return the non-system, active HA users."""
+    users = await hass.auth.async_get_users()
+    return [user for user in users if not user.system_generated and user.is_active]
+
+
+async def _user_options(hass: HomeAssistant) -> list[dict[str, str]]:
     return [
         {"value": user.id, "label": user.name or user.id}
-        for user in users
-        if not user.system_generated and user.is_active
+        for user in await _active_users(hass)
     ]
+
+
+async def _users_by_id(hass: HomeAssistant) -> dict[str, str]:
+    return {
+        user.id: (user.name or "User")
+        for user in await _active_users(hass)
+    }
 
 
 def _participant_from_user(user_id: str, name: str, existing_slugs: set[str]) -> dict[str, Any]:
@@ -73,7 +84,7 @@ class WellnessConfigFlow(ConfigFlow, domain=DOMAIN):
             if not _path_writable(user_input[CONF_MOUNT_PATH]):
                 errors[CONF_MOUNT_PATH] = "invalid_path"
             else:
-                users = {user.id: (user.name or "User") for user in self.hass.auth.async_get_users()}
+                users = await _users_by_id(self.hass)
                 participants = []
                 slugs: set[str] = set()
                 for user_id in user_input[CONF_PARTICIPANTS]:
@@ -95,7 +106,7 @@ class WellnessConfigFlow(ConfigFlow, domain=DOMAIN):
                 ),
                 vol.Required(CONF_PARTICIPANTS): SelectSelector(
                     SelectSelectorConfig(
-                        options=_user_options(self.hass),
+                        options=await _user_options(self.hass),
                         multiple=True,
                         mode=SelectSelectorMode.DROPDOWN,
                     )
@@ -122,7 +133,7 @@ class WellnessOptionsFlow(OptionsFlow):
             if not _path_writable(user_input[CONF_MOUNT_PATH]):
                 return self.async_show_form(
                     step_id="init",
-                    data_schema=self._build_schema(),
+                    data_schema=await self._build_schema(),
                     errors={CONF_MOUNT_PATH: "invalid_path"},
                 )
             data = {**self._config_entry.data}
@@ -137,7 +148,7 @@ class WellnessOptionsFlow(OptionsFlow):
                 slugs.discard(slug)
 
             # add new users (not already participants)
-            users = {u.id: (u.name or "User") for u in self.hass.auth.async_get_users()}
+            users = await _users_by_id(self.hass)
             existing_ids = {p[PARTICIPANT_HA_USER_ID] for p in participants}
             for user_id in user_input.get("add_users", []):
                 if user_id in existing_ids:
@@ -150,16 +161,16 @@ class WellnessOptionsFlow(OptionsFlow):
             self.hass.config_entries.async_update_entry(self._config_entry, data=data)
             return self.async_create_entry(title="", data={})
 
-        return self.async_show_form(step_id="init", data_schema=self._build_schema())
+        return self.async_show_form(step_id="init", data_schema=await self._build_schema())
 
-    def _build_schema(self) -> vol.Schema:
+    async def _build_schema(self) -> vol.Schema:
         data = self._config_entry.data
         participants = data.get(CONF_PARTICIPANTS, [])
         participant_ids = {p[PARTICIPANT_HA_USER_ID] for p in participants}
         add_options = [
-            {"value": u.id, "label": u.name or u.id}
-            for u in self.hass.auth.async_get_users()
-            if not u.system_generated and u.is_active and u.id not in participant_ids
+            {"value": user.id, "label": user.name or user.id}
+            for user in await _active_users(self.hass)
+            if user.id not in participant_ids
         ]
         remove_options = [
             {"value": p[PARTICIPANT_SLUG], "label": p[PARTICIPANT_NAME]}
