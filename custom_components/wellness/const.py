@@ -17,7 +17,7 @@ CONF_PARTICIPANTS = "participants"
 CONF_WEIGHT_SENSORS = "weight_sensors"
 CONF_GROQ_API_KEY = "groq_api_key"
 CONF_GROQ_MODEL = "groq_model"
-DEFAULT_GROQ_MODEL = "llama-3.2-11b-vision-preview"
+DEFAULT_GROQ_MODEL = "qwen/qwen3.6-27b"
 
 PARTICIPANT_HA_USER_ID = "ha_user_id"
 PARTICIPANT_NAME = "name"

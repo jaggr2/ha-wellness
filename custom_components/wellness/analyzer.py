@@ -34,9 +34,15 @@ def _strip_code_fences(text: str) -> str:
     return text.strip()
 
 
+def _strip_think_block(text: str) -> str:
+    """Remove reasoning-model <think>…</think> wrappers (e.g. qwen on Groq)."""
+    return re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
+
+
 def parse_analysis(text: str) -> dict[str, Any]:
     """Parse the model's reply into the meal-analysis schema (best effort)."""
     cleaned = _strip_code_fences(text)
+    cleaned = _strip_think_block(cleaned)
     try:
         data = json.loads(cleaned)
     except (json.JSONDecodeError, TypeError):
@@ -106,7 +112,7 @@ async def analyze_photo(
     photo_bytes: bytes,
     prompt: str = DEFAULT_PROMPT,
     content_type: str = "image/jpeg",
-    max_tokens: int = 800,
+    max_tokens: int = 3000,
     timeout: float = 60.0,
 ) -> dict[str, Any]:
     """Send the photo to Groq and return the parsed meal analysis."""
