@@ -1,7 +1,7 @@
 # Wellness — Project Status & Handoff
 
 > Last updated: 2026-08-14 (evening session) · Author: Athena/Winston session with Roger
-> Repo: `jaggr2/ha-wellness` (public, HACS-ready) · Latest release: **v0.7.0**
+> Repo: `jaggr2/ha-wellness` (public, HACS-ready) · Latest release: **v0.7.2**
 
 This file captures the current state, decisions, what has been built, and what
 remains — so work can be resumed (or handed to another agent) without losing
@@ -94,7 +94,7 @@ A multi-user health & meal tracker for Roger's home:
 - Aggregates (today-kcal / last-meal) are recomputed from the ledgers at startup (`async_restore_meal_aggregates`).
 - **Meal log & delete (v0.7.0)** — `GET /api/wellness/meals` (recent meals, merged with analysis), `GET /api/wellness/photo?path=…` (serves stored photos), `POST /api/wellness/meal/delete` (+ `wellness.delete_meal` service). All authenticated, participant resolved server-side. A **meal log card** (`wellness-meal-log-card.js`) lists meals with photo/time/food/kcal and a Delete button.
 - **Daily kcal target (v0.7.0)** — per-participant `daily_kcal_target` in the options flow (default 2000). `sensor.<user>_kcal_remaining` shows what's left today, with `target_kcal`/`consumed_kcal`/`percent_consumed` attributes.
-- **Eating regularity (v0.7.0)** — `sensor.<user>_meals_today` reports meals logged today plus `meal_times_today`, `min_gap_min`, `avg_gap_min`, `last_gap_min` and a `too_frequent` flag when consecutive meals are < 120 min apart (snacking heuristic).
+- **Eating regularity (v0.7.0)** — `sensor.<user>_meals_today` reports meals logged today plus `meal_times_today`, `min_gap_min`, `avg_gap_min`, `last_gap_min` and a `too_frequent` flag when consecutive meals are closer than the configured threshold. The threshold (`min_meal_gap_min`, default 120 min) is editable in **Configure** (v0.7.1+); stats are cached off the event loop so sensor reads never block core.
 
 **Events**: `wellness_measurement_reminder` · `wellness_pending_weight` · `wellness_weight_assigned` · `wellness_meal_logged` · `wellness_meal_analyzed`
 
@@ -135,6 +135,7 @@ A multi-user health & meal tracker for Roger's home:
 - **Auto meal analysis live**: a real photo uploaded from the Companion app (banana quark) was stored and auto-analyzed (120 kcal); status flow verified `analyzing → done` with `kcal`+`food` attributes; capture card verified rendering "Analyzed · N kcal".
 
 ### Version history (bug fixes worth knowing)
+- **0.7.1–0.7.2** — options flow fixes: `EntitySelector(..., multiple=True)` raised `TypeError` (multiple must live inside `EntitySelectorConfig`); the `edit_slug` selector needed an empty "no edit" option or submitting options returned HTTP 400. Meal-gap threshold made configurable (`min_meal_gap_min` in options); eating-regularity stats cached off the event loop (was a blocking file read during sensor `native_value`).
 - **0.7.0** — meal log list + delete (HTTP endpoints + card + service), per-participant daily kcal target + Kcal remaining sensor, eating-regularity (Meals today) sensor with too-frequent flag.
 - **0.6.0–0.6.2** — auto-analysis on meal upload (uses `asyncio.sleep`, not `hass.async_sleep` which doesn't exist), per-user `Meal analysis status` sensor, capture-card progress/result feedback, aggregates restored from ledger at startup. Card auth token read from `hass.auth.data.access_token`.
 - **0.5.0** — Groq model migration (`qwen/qwen3.6-27b`, llama-vision decommissioned), `<think>`-block stripping in the analyzer, `max_tokens` raised (qwen reasons verbosely).
